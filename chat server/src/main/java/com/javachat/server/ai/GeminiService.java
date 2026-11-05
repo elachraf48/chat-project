@@ -13,21 +13,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 
-/**
- * Phase 9 – Gemini AI Integration
- *
- * Sends a prompt to the Gemini REST API and returns the generated text.
- * The API key is loaded from the environment variable GEMINI_API_KEY or
- * from application.properties (server.gemini.api-key), never from client messages.
- *
- * Endpoint used: generateContent (v1beta, gemini-2.0-flash model).
- *
- * Error handling:
- *   - If the API key is not configured, returns an error message immediately.
- *   - If the HTTP call fails or returns a non-200 status, an error string is returned.
- *   - If the response JSON cannot be parsed, an error string is returned.
- *   - The calling ClientHandler sends the result back only to the requesting client.
- */
+
 public class GeminiService {
 
     private static final String BASE_URL =
@@ -40,11 +26,7 @@ public class GeminiService {
     private final HttpClient httpClient;
     private final ObjectMapper mapper;
 
-    /**
-     * Create a GeminiService, loading the API key from the environment.
-     * Priority: environment variable {@code GEMINI_API_KEY} first,
-     * then system property {@code gemini.api.key}.
-     */
+  
     public GeminiService() {
         this(resolveApiKey());
     }
@@ -58,12 +40,6 @@ public class GeminiService {
         this.mapper = new ObjectMapper();
     }
 
-    /**
-     * Send a prompt to Gemini and return the AI-generated text.
-     *
-     * @param prompt the user's question / prompt (already validated by caller).
-     * @return the generated text, or an error description if the call fails.
-     */
     public String generate(String prompt) {
         if (apiKey == null || apiKey.isBlank()) {
             Logger.error("[GEMINI] API key not configured — set GEMINI_API_KEY environment variable.");
