@@ -6,7 +6,7 @@ A real-time messaging application built with Java. Desktop and Android users com
 
 ## Project Status
 
-| Component | Technology | Status |
+| Component | Technology |
 |---|---|---|
 | **Chat Server** | Java 21, TCP Sockets, Jackson  |
 | **Desktop Client** | Java 21, Swing |
