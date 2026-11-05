@@ -8,9 +8,9 @@ A real-time messaging application built with Java. Desktop and Android users com
 
 | Component | Technology | Status |
 |---|---|---|
-| **Chat Server** | Java 21, TCP Sockets, Jackson | ✅ Complete — deployable fat JAR |
-| **Desktop Client** | Java 21, Swing | ✅ Complete — WhatsApp-style UI, fat JAR |
-| **Mobile Client** | Java, Android (API 26–35) | ✅ Complete — debug APK builds clean |
+| **Chat Server** | Java 21, TCP Sockets, Jackson  |
+| **Desktop Client** | Java 21, Swing |
+| **Mobile Client** | Java, Android (API 26–35) ||
 
 ---
 
