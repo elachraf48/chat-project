@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.JavaChat" parent="Theme.AppCompat.Light.DarkActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="Theme.JavaChat.NoActionBar" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="MessageBubble.Self" parent="">
+        <item name="android:background">@color/message_background_self</item>
+        <item name="android:padding">8dp</item>
+    </style>
+
+    <style name="MessageBubble.Other" parent="">
+        <item name="android:background">@color/message_background_other</item>
+        <item name="android:padding">8dp</item>
+    </style>
+</resources>

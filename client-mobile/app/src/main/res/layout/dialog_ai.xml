@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <EditText
+        android:id="@+id/etAiPrompt"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/hint_ai_prompt"
+        android:inputType="textMultiLine|textCapSentences"
+        android:minLines="3"
+        android:maxLines="6"
+        android:gravity="top"/>
+
+    <ProgressBar
+        android:id="@+id/progressAi"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone"
+        android:layout_marginTop="8dp"/>
+
+    <TextView
+        android:id="@+id/tvAiResponse"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:paddingTop="8dp"
+        android:visibility="gone"/>
+
+    <Button
+        android:id="@+id/btnAskAi"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:text="@string/btn_ask_ai"
+        android:layout_marginTop="12dp"/>
+
+</LinearLayout>

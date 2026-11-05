@@ -1,0 +1,22 @@
+﻿# Maven build output
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

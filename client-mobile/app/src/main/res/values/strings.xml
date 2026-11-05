@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">JavaChat</string>
+    <string name="login_title">Sign In</string>
+    <string name="hint_username">Username</string>
+    <string name="hint_server_ip">Server IP Address</string>
+    <string name="hint_server_port">Server Port</string>
+    <string name="btn_connect">Connect</string>
+    <string name="connecting">Connecting…</string>
+    <string name="chat_title">Global Chat</string>
+    <string name="hint_message">Type a message…</string>
+    <string name="btn_send">Send</string>
+    <string name="btn_attach">Attach</string>
+    <string name="btn_record">Record</string>
+    <string name="btn_ai">AI</string>
+    <string name="online_users_title">Online Users</string>
+    <string name="no_users_online">No users online</string>
+    <string name="ai_dialog_title">Gemini AI Assistant</string>
+    <string name="hint_ai_prompt">Ask Gemini something…</string>
+    <string name="btn_ask_ai">Ask</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="recording">Recording…</string>
+    <string name="stop_recording">Stop</string>
+    <string name="play_audio">Play</string>
+    <string name="error_connection">Connection failed. Check the server address and port.</string>
+    <string name="error_empty_username">Please enter a username.</string>
+    <string name="error_invalid_username">Username must be 1–32 characters: letters, digits, _ or -</string>
+    <string name="error_empty_server">Please enter a server address.</string>
+    <string name="error_invalid_port">Port must be a number between 1 and 65535.</string>
+    <string name="server_port_default">12345</string>
+    <string name="file_received">📎 %1$s received — saved to Downloads</string>
+    <string name="file_sent">📎 %1$s sent</string>
+    <string name="file_send_failed">⚠️ Failed to send %1$s</string>
+    <string name="audio_sent">🔊 Audio sent</string>
+    <string name="audio_received">🔊 Audio message — tap to play</string>
+    <string name="file_received_old">File received (Android 8 — check Downloads)</string>
+</resources>

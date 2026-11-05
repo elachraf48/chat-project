@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#1565C0</color>
+    <color name="colorPrimaryDark">#0D47A1</color>
+    <color name="colorAccent">#1E88E5</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="message_background_self">#BBDEFB</color>
+    <color name="message_background_other">#F5F5F5</color>
+    <color name="message_text_self">#0D47A1</color>
+    <color name="message_text_other">#212121</color>
+    <color name="online_user_dot">#4CAF50</color>
+    <color name="timestamp_color">#9E9E9E</color>
+    <color name="input_background">#FFFFFF</color>
+    <color name="divider_color">#E0E0E0</color>
+</resources>

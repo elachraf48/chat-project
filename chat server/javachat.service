@@ -1,0 +1,42 @@
+[Unit]
+Description=JavaChat Server
+Documentation=https://github.com/your-org/javachat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Run as a dedicated non-root user (create with: adduser --system --no-create-home javachat)
+User=javachat
+Group=javachat
+
+# Location of the deployed JAR and config
+WorkingDirectory=/opt/javachat
+
+# Start command — JVM flags:
+#   -Xmx256m          cap heap; tune to your VPS RAM
+#   logging.config    use the bundled logging.properties
+#   gemini.api.key    injected from EnvironmentFile (never in this file)
+ExecStart=/usr/bin/java \
+    -Xmx256m \
+    -Djava.util.logging.config.file=/opt/javachat/logging.properties \
+    -jar /opt/javachat/chat-server.jar
+
+# Gemini API key stored in /etc/javachat/env (mode 0600, owned by root)
+# File format:  GEMINI_API_KEY=your_key_here
+EnvironmentFile=-/etc/javachat/env
+
+# Restart policy
+Restart=on-failure
+RestartSec=5s
+
+# Harden the service
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/javachat/logs
+
+# Give the server up to 30 s to shut down gracefully before SIGKILL
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
