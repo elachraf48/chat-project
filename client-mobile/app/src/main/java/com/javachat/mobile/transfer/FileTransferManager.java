@@ -2,11 +2,14 @@ package com.javachat.mobile.transfer;
 
 import android.content.ContentValues;
 import android.content.Context;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.util.Base64;
+import android.widget.Toast;
 
 import com.javachat.mobile.config.ClientConfig;
 import com.javachat.mobile.network.ConnectionManager;
@@ -47,7 +50,9 @@ public class FileTransferManager {
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     private final Map<String, ByteArrayOutputStream> incomingBuffers = new HashMap<>();
-    private final Map<String, Message> incomingMeta = new HashMap<>();
+    private final Map<String, Message>               incomingMeta    = new HashMap<>();
+    /** fileId → fully assembled bytes, retained so the user can tap Download later */
+    private final Map<String, byte[]>                receivedFiles   = new HashMap<>();
 
     private FileTransferManager() {}
 
@@ -65,7 +70,10 @@ public class FileTransferManager {
             String fileName = getFileName(context, fileUri);
             try {
                 byte[] data = readAllBytes(context, fileUri);
-                if (data == null) return;
+                if (data == null) {
+                    if (callback != null) callback.onSendFailed(fileName);
+                    return;
+                }
                 if (data.length > ClientConfig.MAX_FILE_SIZE_BYTES) return;
 
                 String fileId   = UUID.randomUUID().toString();
@@ -119,9 +127,11 @@ public class FileTransferManager {
             case FILE_COMPLETE: {
                 String fid = message.getFileId();
                 ByteArrayOutputStream buf = fid != null ? incomingBuffers.remove(fid) : null;
-                Message meta = fid != null ? incomingMeta.remove(fid) : null;
+                // Keep meta so MessageAdapter can read fileName; remove only after download
+                Message meta = fid != null ? incomingMeta.get(fid) : null;
                 if (buf != null && meta != null) {
-                    saveToDownloads(context, meta.getFileName(), buf.toByteArray());
+                    // Store bytes for on-demand download — do NOT auto-save
+                    receivedFiles.put(fid, buf.toByteArray());
                 }
                 break;
             }
@@ -133,11 +143,31 @@ public class FileTransferManager {
 
     /**
      * Returns the fileName from the FILE_META that arrived for this transfer.
-     * Must be called BEFORE handleIncoming(FILE_COMPLETE) — that call removes the meta entry.
      */
     public String getFileNameForId(String fileId) {
         Message meta = fileId != null ? incomingMeta.get(fileId) : null;
         return meta != null ? meta.getFileName() : null;
+    }
+
+    /**
+     * Returns the fileSize from the FILE_META that arrived for this transfer.
+     */
+    public Long getFileSizeForId(String fileId) {
+        Message meta = fileId != null ? incomingMeta.get(fileId) : null;
+        return meta != null ? meta.getFileSize() : null;
+    }
+
+    /**
+     * Called when the user taps the Download button on a received file bubble.
+     * Saves the pre-assembled bytes to the Downloads folder.
+     */
+    public void saveReceivedFile(String fileId, Context context) {
+        byte[] data = fileId != null ? receivedFiles.get(fileId) : null;
+        Message meta = fileId != null ? incomingMeta.get(fileId) : null;
+        if (data == null || meta == null) return;
+
+        String fileName = meta.getFileName();
+        executor.submit(() -> saveToDownloads(context, fileName, data));
     }
 
     // -------------------------------------------------------------------------
@@ -170,7 +200,16 @@ public class FileTransferManager {
                     }
                 }
             }
-        } catch (IOException ignored) {}
+            // Show success toast only on the non-exception path
+            android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+            main.post(() -> Toast.makeText(context,
+                    "📎 " + fileName + " saved to Downloads", Toast.LENGTH_SHORT).show());
+        } catch (IOException e) {
+            // Notify user on main thread that the save failed
+            android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+            main.post(() -> Toast.makeText(context,
+                    "Failed to save file: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+        }
     }
 
     private byte[] readAllBytes(Context context, Uri uri) throws IOException {
@@ -185,8 +224,19 @@ public class FileTransferManager {
     }
 
     private String getFileName(Context context, Uri uri) {
-        String name = uri.getLastPathSegment();
-        if (name == null) name = "file_" + System.currentTimeMillis();
-        return name;
+        // Use ContentResolver cursor to get the real display name from the content URI
+        try (Cursor cursor = context.getContentResolver().query(
+                uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (idx >= 0) {
+                    String name = cursor.getString(idx);
+                    if (name != null && !name.isEmpty()) return name;
+                }
+            }
+        } catch (Exception ignored) {}
+        // Fallback: last path segment (raw, but better than nothing)
+        String segment = uri.getLastPathSegment();
+        return segment != null ? segment : "file_" + System.currentTimeMillis();
     }
 }

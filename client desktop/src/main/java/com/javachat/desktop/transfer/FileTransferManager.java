@@ -40,8 +40,12 @@ public class FileTransferManager {
 
     /**
      * Open a file chooser, validate, then send on a background thread.
+     *
+     * @param onSelected  called on the EDT right after the user picks a valid file,
+     *                    with (fileName, fileSize) so the caller can show a sent bubble
+     *                    immediately. May be null.
      */
-    public void selectAndSendFile() {
+    public void selectAndSendFile(java.util.function.BiConsumer<String, Long> onSelected) {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Select file to send");
         if (chooser.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) return;
@@ -56,9 +60,19 @@ public class FileTransferManager {
             return;
         }
 
+        if (onSelected != null) {
+            javax.swing.SwingUtilities.invokeLater(
+                    () -> onSelected.accept(file.getName(), file.length()));
+        }
+
         Thread sender = new Thread(() -> doSend(file), "file-sender");
         sender.setDaemon(true);
         sender.start();
+    }
+
+    /** Backwards-compat overload — no bubble callback. */
+    public void selectAndSendFile() {
+        selectAndSendFile(null);
     }
 
     // -------------------------------------------------------------------------

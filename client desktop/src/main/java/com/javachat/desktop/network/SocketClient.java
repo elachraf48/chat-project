@@ -27,11 +27,23 @@ public class SocketClient {
      * @throws IOException if the connection fails.
      */
     public void connect(String host, int port) throws IOException {
-        socket = new Socket(host, port);
-        writer = new PrintWriter(
-                new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-        reader = new BufferedReader(
-                new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+        // Open new socket first; only replace fields after streams init successfully
+        // so the old socket is not leaked if stream initialization throws.
+        Socket newSocket = new Socket(host, port);
+        try {
+            PrintWriter newWriter = new PrintWriter(
+                    new OutputStreamWriter(newSocket.getOutputStream(), StandardCharsets.UTF_8), true);
+            BufferedReader newReader = new BufferedReader(
+                    new InputStreamReader(newSocket.getInputStream(), StandardCharsets.UTF_8));
+            // All good — close old socket and swap in the new one atomically
+            close();
+            socket = newSocket;
+            writer = newWriter;
+            reader = newReader;
+        } catch (IOException e) {
+            try { newSocket.close(); } catch (IOException ignored) {}
+            throw e;
+        }
     }
 
     /**
@@ -41,6 +53,7 @@ public class SocketClient {
     public void send(Message message) throws IOException {
         if (writer == null) throw new IOException("Not connected.");
         writer.println(ProtocolManager.serialize(message));
+        if (writer.checkError()) throw new IOException("Write failed — connection lost.");
     }
 
     /**

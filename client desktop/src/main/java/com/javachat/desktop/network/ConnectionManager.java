@@ -18,13 +18,15 @@ import java.util.concurrent.Executors;
 public class ConnectionManager {
 
     private final SocketClient socketClient = new SocketClient();
-    private final ExecutorService readerThread = Executors.newSingleThreadExecutor(r -> {
+    // Not final — recreated on each reconnect so shutdown() doesn't block future submits.
+    private ExecutorService readerThread = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "server-reader");
         t.setDaemon(true);
         return t;
     });
 
-    private MessageListener listener;
+    // volatile: written on the EDT (LoginFrame/MainFrame), read on the reader background thread.
+    private volatile MessageListener listener;
 
     public void setListener(MessageListener listener) {
         this.listener = listener;
@@ -35,6 +37,15 @@ public class ConnectionManager {
      * @throws IOException if the TCP connection cannot be established.
      */
     public void connect() throws IOException {
+        // If the previous reader executor was shut down (after a disconnect),
+        // create a fresh one so startReaderLoop() can submit to it.
+        if (readerThread.isShutdown()) {
+            readerThread = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "server-reader");
+                t.setDaemon(true);
+                return t;
+            });
+        }
         socketClient.connect(ClientConfig.SERVER_HOST, ClientConfig.SERVER_PORT);
         startReaderLoop();
     }
@@ -65,14 +76,17 @@ public class ConnectionManager {
             try {
                 Message msg;
                 while ((msg = socketClient.receive()) != null) {
-                    if (listener != null) {
+                    MessageListener l = listener; // snapshot volatile to avoid TOCTOU
+                    if (l != null) {
                         final Message m = msg;
-                        listener.onMessage(m);
+                        l.onMessage(m);
                     }
                 }
-                if (listener != null) listener.onDisconnected("Server closed the connection.");
+                MessageListener l = listener;
+                if (l != null) l.onDisconnected("Server closed the connection.");
             } catch (IOException e) {
-                if (listener != null) listener.onDisconnected(e.getMessage());
+                MessageListener l = listener;
+                if (l != null) l.onDisconnected(e.getMessage());
             }
         });
     }

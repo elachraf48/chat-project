@@ -20,9 +20,12 @@ public class AudioPlayer {
         try {
             mediaPlayer.setDataSource(context, uri);
             mediaPlayer.setOnCompletionListener(mp -> {
-                release();
-                if (listener != null) listener.onComplete();
-            });
+                    release();
+                    if (listener != null) {
+                        // MediaPlayer completion fires on an internal thread — post to main thread
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(listener::onComplete);
+                    }
+                });
             mediaPlayer.prepare();
             mediaPlayer.start();
         } catch (IOException e) {

@@ -22,7 +22,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -45,10 +44,10 @@ public class AudioManager {
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     // fileId → accumulated bytes for in-progress incoming audio
-    private final Map<String, ByteArrayOutputStream> incomingBuffers = new HashMap<>();
-    private final Map<String, Message>               incomingMeta    = new HashMap<>();
+    private final Map<String, ByteArrayOutputStream> incomingBuffers = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Message>               incomingMeta    = new java.util.concurrent.ConcurrentHashMap<>();
     // fileId → saved cache URI for playback
-    private final Map<String, Uri>                   audioCache      = new HashMap<>();
+    private final Map<String, Uri>                   audioCache      = new java.util.concurrent.ConcurrentHashMap<>();
 
     private AudioManager() {}
 
@@ -147,7 +146,9 @@ public class AudioManager {
                 ConnectionManager.getInstance().send(Message.audioComplete(fileId));
                 if (callback != null) callback.onSendComplete(fileId);
 
-            } catch (IOException ignored) {}
+            } catch (IOException e) {
+                android.util.Log.e("AudioManager", "sendAudio failed: " + e.getMessage(), e);
+            }
         });
     }
 

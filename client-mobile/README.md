@@ -1,234 +1,270 @@
-# JavaChat — Full Functionality Audit Report
+# JavaChat — Android Mobile Client
 
-**Date:** November 2026  
-**Scope:** Chat Server + Mobile Client  
-**Audit method:** Static code review of all source files
+A Java Android chat client (API 26–35) for the JavaChat application. Connects to the JavaChat TCP server, participates in the global chat room, and supports text messaging, file sharing, audio recording, and Gemini AI queries.
 
 ---
 
-## Summary
+## Quick Start
 
-| Feature | Server | Mobile Client | Status |
-|---|---|---|---|
-| TCP connection | ✅ | ✅ | Working |
-| JOIN / authentication | ✅ | ✅ | Working |
-| Chat messaging | ✅ | ✅ | Working |
-| Presence (USER_JOINED/LEFT) | ✅ | ✅ | Working |
-| Online users list | ✅ | ✅ | Working |
-| File sharing | ✅ | ⚠️ | 2 issues |
-| Audio messaging | ✅ | ⚠️ | 1 issue |
-| Gemini AI assistant | ✅ | ✅ | Working |
-| Reconnect / disconnect | ✅ | ✅ | Working |
-| Input validation | ✅ | ✅ | Working |
-| Notifications | N/A | ✅ | Working |
-| Own message deduplication | ✅ | ⚠️ | 1 issue |
+### Requirements
 
-**Bugs to fix: 3  
-Improvements: 3**
+- Android Studio (Ladybug or newer recommended)
+- Android SDK API 35
+- A running JavaChat server (see [`../chat server/README.md`](../chat%20server/README.md))
 
----
+### Build
 
-## ✅ Working correctly
+```bash
+cd client-mobile
+./gradlew assembleDebug
+# Output: app/build/outputs/apk/debug/app-debug.apk
+```
 
-### 1. TCP Connection & JOIN
-- Server accepts unlimited concurrent clients via `ExecutorService`.
-- `LoginActivity` validates username format (regex `[A-Za-z0-9_\-]{1,32}`) client-side before connecting.
-- `ConnectionManager` guards against double-connect with `AtomicBoolean`.
-- JOIN_SUCCESS correctly triggers navigation to `ChatActivity`.
-- `ChatActivity` uses `Theme.JavaChat.NoActionBar` — no more toolbar crash on start.
+### Install
 
-### 2. Chat messages
-- Server uses `broadcastExcept` — sender does NOT receive their own echo.
-- Mobile does NOT add own message locally — waits for server broadcast.
-- **Inconsistency detected:** see BUG 1 below.
+```bash
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
 
-### 3. Presence & online users list
-- `USER_JOINED` / `USER_LEFT` broadcast correctly to all others.
-- Online users drawer updates correctly.
+### Server address
 
-### 4. Gemini AI
-- `AI_REQUEST` uses `prompt` field — matches server's `Message.getPrompt()`.
-- `AI_RESPONSE` returns only to the requesting client.
-- API key loaded from `GEMINI_API_KEY` env var — never exposed to clients.
-- AI dialog guarded against dangling views (`aiDialog.isShowing()` check).
+At the login screen, enter the server's IP address and port (`12345` by default).
 
-### 5. Input validation & security
-- Server: 1 MB line limit, 32-char username, 2000-char message, file size limits.
-- Client: same username regex as server, port range check, chunk size cap.
-- `InputValidator.isValidIncoming` no longer crashes on null `fileSize` (fixed).
-
-### 6. Reconnect
-- `LoginActivity.onCreate()` calls `disconnect()` + `logout()` — clean state on return to login.
-- `ChatActivity.onDestroy()` disconnects cleanly.
-
----
-
-## 🐛 Bugs to Fix
-
-### BUG 1 — Own chat messages never appear for the sender
-
-**Location:** [`GlobalChatFragment.sendTextMessage()`](client-mobile/app/src/main/java/com/javachat/mobile/ui/GlobalChatFragment.java:183) and [`GlobalChatRoom.broadcast()`](chat server/src/main/java/com/javachat/server/chat/GlobalChatRoom.java)
-
-**Problem:** The server uses `broadcastExcept(senderUsername)` — it intentionally does NOT send the message back to the sender. The mobile `sendTextMessage()` also does NOT add the message locally (BUG 3 fix). Result: the sender's own message **never appears** in their chat.
-
-**Fix options (choose one):**  
-- **Option A (recommended):** Add the message locally in `sendTextMessage()` with the current timestamp (same as before BUG 3 fix). This gives instant feedback with no round-trip delay.
-- **Option B:** Revert server to `broadcast()` (send to everyone including sender), and remove the local add. Then the sender sees their message with the server-stamped UUID and timestamp.
-
-**Recommended fix:** Option A — add message locally for the sender.
+Default fallback in [`ClientConfig.java`](app/src/main/java/com/javachat/mobile/config/ClientConfig.java):
 
 ```java
-// In GlobalChatFragment.sendTextMessage()
-private void sendTextMessage() {
-    String text = etMessageInput.getText().toString().trim();
-    if (text.isEmpty()) return;
-    String username = AuthenticationManager.getInstance().getUsername();
-    Message msg = Message.chat(username, text);
-    ConnectionManager.getInstance().send(msg);
-    etMessageInput.setText("");
-    addMessage(msg);   // ← add this line back
-}
+public static final String DEFAULT_SERVER_IP   = "172.31.48.1"; // Android emulator host
+public static final int    DEFAULT_SERVER_PORT  = 12345;
 ```
 
 ---
 
-### BUG 2 — FILE_COMPLETE notification shows null filename
+## Features
 
-**Location:** [`GlobalChatFragment.handleMessage()`](client-mobile/app/src/main/java/com/javachat/mobile/ui/GlobalChatFragment.java:151)
-
-**Problem:** On `FILE_COMPLETE`, the fragment calls `message.getFileName()`. But the server's `FILE_COMPLETE` message only carries `fileId` — `fileName` is null. The fragment falls back to `"file"`, so the notification always says *"📎 file received — saved to Downloads"*.
-
-**Fix:** Store the `fileName` from `FILE_META` in `FileTransferManager.incomingMeta` and retrieve it when `FILE_COMPLETE` arrives:
-
-```java
-// In GlobalChatFragment, case FILE_COMPLETE:
-case FILE_COMPLETE:
-    String savedFileName = FileTransferManager.getInstance()
-            .getFileNameForId(message.getFileId()); // add this method
-    FileTransferManager.getInstance().handleIncoming(message, requireContext());
-    addSystemMessage(getString(R.string.file_received,
-            savedFileName != null ? savedFileName : "file"));
-    break;
-```
-
-Add to `FileTransferManager`:
-```java
-public String getFileNameForId(String fileId) {
-    Message meta = incomingMeta.get(fileId);
-    return meta != null ? meta.getFileName() : null;
-}
-```
-
----
-
-### BUG 3 — Own sent message has no timestamp displayed
-
-**Location:** [`GlobalChatFragment.sendTextMessage()`](client-mobile/app/src/main/java/com/javachat/mobile/ui/GlobalChatFragment.java:183) — linked to BUG 1 fix
-
-**Problem:** When BUG 1 is fixed by adding the message locally, `Message.chat(username, text)` does not set a `timestamp`. `MessageAdapter.formatTime()` will display an empty string for own messages.
-
-**Fix:** Set a client-side timestamp when creating the local message:
-
-```java
-// In the mobile Message class, update chat() factory:
-public static Message chat(String sender, String text) {
-    Message m = new Message();
-    m.type = MessageType.CHAT;
-    m.sender = sender;
-    m.text = text;
-    m.timestamp = java.time.Instant.now().toString();  // ← add this
-    return m;
-}
-```
-
----
-
-## ⚠️ Improvements
-
-### IMP 1 — File transfer: no progress feedback to sender
-
-**Location:** [`FileTransferManager.sendFile()`](client-mobile/app/src/main/java/com/javachat/mobile/transfer/FileTransferManager.java:57)
-
-**Problem:** File sending happens silently in the background. For large files the user has no indication that a transfer is in progress or completed. Errors are silently swallowed (`catch (IOException ignored)`).
-
-**Improvement:** After `FILE_COMPLETE` is sent, add a system message to the chat: *"📎 filename.pdf sent"*. This requires a callback from `FileTransferManager` back to the fragment. For now, the minimum fix is to log a system message via a callback interface:
-
-```java
-// Add interface to FileTransferManager:
-public interface TransferCallback {
-    void onSendComplete(String fileName);
-    void onSendFailed(String fileName);
-}
-```
-
----
-
-### IMP 2 — Audio: sender sees no confirmation that audio was sent
-
-**Location:** [`GlobalChatFragment.onAudioReady()`](client-mobile/app/src/main/java/com/javachat/mobile/ui/GlobalChatFragment.java:207)
-
-**Problem:** When the user records and sends audio, the recording dialog closes and nothing appears in the chat. The receiver sees an audio bubble, but the sender sees nothing.
-
-**Improvement:** After `AudioManager.sendAudio()` completes, add an audio message locally for the sender too (similar to BUG 1 fix for chat). This requires a completion callback from `AudioManager.sendAudio()`.
-
----
-
-### IMP 3 — `GlobalChatFragment` not added to the online users list on JOIN_SUCCESS
-
-**Location:** [`ChatActivity.onMessageReceived()`](client-mobile/app/src/main/java/com/javachat/mobile/ui/ChatActivity.java:90) and [`GlobalChatFragment.handleMessage()`](client-mobile/app/src/main/java/com/javachat/mobile/ui/GlobalChatFragment.java:128)
-
-**Problem:** When the user joins, `JOIN_SUCCESS` contains `sender = username`. The online users list is only updated on `USER_JOINED` messages (which go to other clients, not the sender). So the user never sees themselves in the online users list.
-
-**Improvement:** In `LoginActivity.onMessageReceived`, when `JOIN_SUCCESS` is received, also call `addOnlineUser(username)` — or in `ChatActivity.onCreate()` after the fragment is added:
-
-```java
-// In ChatActivity after setting listener, add own username to online list
-// (requires a public method on GlobalChatFragment)
-GlobalChatFragment f = getGlobalChatFragment();
-if (f != null) {
-    f.addSelf(AuthenticationManager.getInstance().getUsername());
-}
-```
-
----
-
-## Protocol field alignment — verified ✅
-
-The following field name mismatches from earlier versions are now **fixed** in the mobile `Message` class:
-
-| Field | Server | Mobile (old) | Mobile (current) |
-|---|---|---|---|
-| Transfer ID | `fileId` | `transferId` ❌ | `fileId` ✅ |
-| Chunk payload | `data` | `text` ❌ | `data` ✅ |
-| AI request text | `prompt` | `text` ❌ | `prompt` ✅ |
-| File size type | `Long` | `long` ❌ | `Long` ✅ |
-
----
-
-## Server — verified ✅
-
-| Check | Result |
+| Feature | Description |
 |---|---|
-| `AUDIO_COMPLETE` handler in `ClientHandler` | ✅ Present |
-| `Message.audioComplete()` factory method | ✅ Present |
-| `AudioTransferManager.handleAudioComplete()` | ✅ Present |
-| `GlobalChatRoom` uses `broadcastExcept` | ✅ Fixed |
-| `USER_LEFT` broadcasts to all on disconnect | ✅ Working |
-| File size limit enforced (50 MB) | ✅ Working |
-| Audio size limit enforced (10 MB) | ✅ Working |
-| Audio format allowlist enforced | ✅ Working |
-| AI prompt length cap (2000 chars) | ✅ Working |
-| Username format validated | ✅ Working |
+| **Text chat** | WhatsApp-style bubbles — green own (right), white others (left), grey system pills |
+| **File sharing** | Send any file up to 50 MB; receivers get a ⬇ Download button saved to Downloads |
+| **Audio messages** | Record `.m4a` voice messages up to 10 MB; play back in-app with MediaPlayer |
+| **Gemini AI** | Toolbar button opens AI dialog; response shown as a system bubble in chat |
+| **Online users** | Sliding drawer with live user list and presence notifications |
+| **Reconnect** | Clean disconnect on `ChatActivity.onDestroy()`; re-enter credentials to reconnect |
 
 ---
 
-## Action plan — priority order
+## UI Structure
 
-| # | Severity | Fix |
+### Screens
+
+| Screen | Class | Description |
 |---|---|---|
-| 1 | 🔴 High | **BUG 1** — Add own message locally after send (1 line in `GlobalChatFragment`) |
-| 2 | 🔴 High | **BUG 3** — Add timestamp to `Message.chat()` factory in mobile client |
-| 3 | 🟡 Medium | **BUG 2** — Store fileName from META and use it in FILE_COMPLETE notification |
-| 4 | 🟡 Medium | **IMP 3** — Add self to online users list on JOIN_SUCCESS |
-| 5 | 🟢 Low | **IMP 1** — File send completion callback |
-| 6 | 🟢 Low | **IMP 2** — Audio send completion callback |
+| Login | `LoginActivity` | Username, server IP, port input + Connect button |
+| Chat | `ChatActivity` | Root container hosting `GlobalChatFragment` + online users drawer |
+| Global Chat | `GlobalChatFragment` | RecyclerView message list + input bar |
+
+### Message view types (RecyclerView)
+
+| Type | Alignment | Appearance |
+|---|---|---|
+| Own text message | Right | Green bubble `#DCF8C6` |
+| Other text message | Left | White bubble `#FFFFFF` |
+| System event | Centre | Green pill `#D4EED4`, dark text |
+| Audio message | Right / Left | Teal bubble with ▶ play button + "Voice message" |
+| File message | Left (received) / Right (sent) | White bubble with 📄 icon, filename, size, ⬇ Download |
+
+### Color palette
+
+| Token | Hex | Usage |
+|---|---|---|
+| `colorPrimary` | `#075E54` | Toolbar, buttons |
+| `colorAccent` | `#25D366` | Send button, active elements |
+| `chatBackground` | `#ECE5DD` | Message list background |
+| `bubbleSelf` | `#DCF8C6` | Own message bubble |
+| `bubbleOther` | `#FFFFFF` | Received message bubble |
+| `systemMsgBg` | `#D4EED4` | System event pill background |
+
+---
+
+## Package Structure
+
+```
+com.javachat.mobile
+├── MainActivity                Entry point / splash router
+├── JavaChatApplication         Application subclass
+├── config/
+│   └── ClientConfig            Constants: IP, port, timeouts, chunk size, max sizes
+├── network/
+│   ├── SocketClient            Raw TCP socket — send() / receive() JSON lines
+│   ├── ConnectionManager       Lifecycle + background reader thread; AtomicBoolean guard
+│   ├── MessageListener         Callback interface for incoming messages
+│   └── NotificationHelper      Android notification channel + post helpers
+├── protocol/
+│   ├── Message                 Jackson DTO — all fields; @JsonInclude(NON_NULL); factory methods
+│   ├── MessageType             Enum — 16 message types
+│   └── ProtocolManager         Jackson serialize / deserialize
+├── auth/
+│   ├── AuthenticationManager   Singleton — holds current username
+│   └── LoginActivity           Username + server input, connect flow
+├── transfer/
+│   └── FileTransferManager     Chunked send (64 KB Base64); chunk reassembly; MediaStore save
+├── audio/
+│   ├── AudioManager            Orchestrates record → send and receive → play
+│   ├── AudioRecorder           MediaRecorder capture → .m4a temp file
+│   └── AudioPlayer             MediaPlayer playback from temp file
+├── ai/
+│   └── GeminiChatManager       Sends AI_REQUEST; shows response dialog
+├── ui/
+│   ├── ChatActivity            Main container — hosts fragment + drawer
+│   ├── GlobalChatFragment      Message list + input bar + all message handling
+│   ├── MessageAdapter          5-type RecyclerView adapter
+│   ├── OnlineUsersAdapter      Online users drawer list
+│   └── MessageInputController  Input bar button wiring
+└── util/
+    ├── InputValidator          Regex + bounds checks (username, IP, port, file size)
+    └── PermissionManager       Android runtime permission requests
+```
+
+---
+
+## Architecture
+
+### Threading model
+
+| Thread | Role |
+|---|---|
+| **Main (UI)** | All RecyclerView updates, dialog creation, button handlers |
+| **Background reader** | `ConnectionManager` executor — reads JSON from socket, posts to main thread |
+| **File send thread** | `FileTransferManager` — reads bytes, sends chunks |
+| **Audio record** | MediaRecorder on a background service thread |
+| **Audio play** | MediaPlayer callbacks on main thread |
+
+### Connection lifecycle
+
+```
+LoginActivity.connectToServer()     [background thread via ExecutorService]
+  └─ ConnectionManager.connect()
+      └─ SocketClient connects to HOST:PORT
+          └─ Send JOIN message
+              └─ Receive JOIN_SUCCESS → navigate to ChatActivity
+                 Receive JOIN_ERROR  → post error to UI thread, re-enable button
+```
+
+---
+
+## File Transfer Protocol
+
+```
+Sender → FILE_META  (fileId UUID, fileName, fileSize Long, totalChunks Integer)
+Sender → FILE_CHUNK ×N  (fileId, chunkIndex, data Base64)
+Sender → FILE_COMPLETE  (fileId)
+
+Server relays all three to every other connected client, adding sender field.
+```
+
+- **Chunk size:** 64 KB
+- **Encoding:** `android.util.Base64.NO_WRAP`
+- **Max file size:** 50 MB (`ClientConfig.MAX_FILE_SIZE_BYTES`)
+- **Save (API 29+):** `MediaStore.Downloads`
+- **Save (API 26–28):** direct write to `Environment.DIRECTORY_DOWNLOADS`
+
+---
+
+## Audio Messaging Protocol
+
+Same chunked structure as file transfer but using `AUDIO_META` / `AUDIO_CHUNK` / `AUDIO_COMPLETE` types.
+
+- **Format:** `.m4a` (MediaRecorder default MPEG-4 + AAC)
+- **Max size:** 10 MB
+- **Record:** `AudioRecorder` writes to a temp file in `getCacheDir()`
+- **Play:** `AudioPlayer` copies received bytes to a temp file, plays with `MediaPlayer`
+
+---
+
+## Permissions
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    android:maxSdkVersion="28" />
+```
+
+---
+
+## Build Configuration
+
+| Setting | Value |
+|---|---|
+| Min SDK | 26 (Android 8.0 Oreo) |
+| Target SDK | 35 (Android 15) |
+| Compile SDK | 35 |
+| Java | 11 |
+| Gradle | 8.x (Kotlin DSL) |
+| Build features | View binding |
+
+**Dependencies:**
+- `androidx.appcompat`, `androidx.constraintlayout`, `androidx.drawerlayout`, `androidx.recyclerview`
+- `com.google.android.material`
+- `com.fasterxml.jackson.core:jackson-databind:2.17.2`
+
+---
+
+## Protocol Field Reference
+
+The `Message` class fields, with their correct names (aligned with server):
+
+| Field | Type | Notes |
+|---|---|---|
+| `type` | `MessageType` | Message type enum |
+| `messageId` | `String` | Server-assigned UUID |
+| `sender` | `String` | Username |
+| `text` | `String` | Chat message body |
+| `timestamp` | `String` | ISO-8601 string |
+| `fileId` | `String` | UUID for file / audio transfers |
+| `fileName` | `String` | Original filename |
+| `fileSize` | `Long` | Size in bytes |
+| `totalChunks` | `Integer` | Total chunk count |
+| `chunkIndex` | `Integer` | Zero-based chunk index |
+| `data` | `String` | Base64-encoded chunk payload |
+| `prompt` | `String` | AI request text |
+
+> ⚠️ `fileId` (not `transferId`), `data` (not `text` for chunks), `prompt` (not `text` for AI) — these were corrected from earlier versions.
+
+---
+
+## Known Issues
+
+| # | Severity | Issue |
+|---|---|---|
+| — | 🟠 Medium | File upload has no progress bar — bubble appears only after all chunks are sent |
+| — | 🟢 Low | `RECORD_AUDIO` not runtime-requested on API 31+ — add request in `PermissionManager` |
+| — | 🟢 Low | No typing indicators or read receipts |
+
+### Fixed (Audit #1 + #2)
+
+| Issue | Fix |
+|---|---|
+| Own chat messages never appeared for sender | `addMessage(msg)` added after `send()` in `GlobalChatFragment` |
+| FILE_COMPLETE notification showed `"file"` not actual filename | `FileTransferManager.getFileNameForId()` wired in `GlobalChatFragment` |
+| User didn't see themselves in online users list | `fragment.addSelf()` called from `ChatActivity` |
+| AI dialog crash on config change | `onDestroyView()` dismisses dialog; `isShowing()` guard on updates |
+| File save fails on API 26–28 | Fallback writes directly to `Environment.DIRECTORY_DOWNLOADS` |
+| Double-connect on fast tap | `AtomicBoolean connecting` guard in `ConnectionManager` |
+| Protocol field mismatches (`fileId`, `data`, `prompt`, `Long`) | `Message.java` fields corrected to match server |
+| `audioCache`, `incomingBuffers`, `incomingMeta` HashMap race | Changed to `ConcurrentHashMap` |
+| MediaPlayer completion listener fires off-main-thread | Posts to `MainLooper` before calling `onCompletion()` |
+| `recorder.prepare()` failure left recorder in bad state | `recorder.release()` called in catch before re-throwing |
+| `tvAiResponse`/`progressAi` NPE in AI callback | Null-checked before access |
+| `requireActivity()` called without `isAdded()` guard | `isAdded()` guard added before `requireActivity()` in callbacks |
+| "✓ Saved to Downloads" hardcoded string | Moved to `R.string.file_saved_to_downloads` |
+| Success toast fired even on save failure | Toast moved inside try block in `saveToDownloads()` |
+| Null data from `readAllBytes()` returned silently | Now calls `callback.onSendFailed()` |
+| Timestamp substring guard `< 19` for index 11–16 extraction | Fixed to `< 16` |
+| Stale `v.getContext()` in audio play listeners | Captures `getApplicationContext()` at bind time |
+
+---
+
+## Full Documentation
+
+See [`../README.md`](../README.md) for the complete project overview, protocol specification, and session flow diagram.

@@ -6,12 +6,11 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -20,15 +19,16 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.geom.Arc2D;
 import java.awt.geom.Ellipse2D;
+import java.awt.geom.GeneralPath;
 import java.awt.geom.RoundRectangle2D;
 
 /**
  * WhatsApp-style bottom input bar.
- * Dark background, rounded text field, icon-style buttons.
  *
- * All buttons use Swing's built-in text rendering (no custom drawString hacks)
- * so they display reliably across all JVMs and font configs.
+ * All icons are drawn with Graphics2D primitives — no font, no Unicode, no emoji.
+ * This renders identically on every JVM and OS regardless of installed fonts.
  */
 public class MessageInputPanel extends JPanel {
 
@@ -45,8 +45,8 @@ public class MessageInputPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(6, 8, 8, 8));
 
         inputField  = createInputField();
-        fileButton  = createIconButton("File", ChatTheme.TEXT_SECONDARY);
-        audioButton = createIconButton("Mic", ChatTheme.TEXT_SECONDARY);
+        fileButton  = createFileButton();
+        audioButton = createMicButton();
         sendButton  = createSendButton();
 
         JPanel left = new JPanel(new BorderLayout(4, 0));
@@ -67,15 +67,15 @@ public class MessageInputPanel extends JPanel {
 
     public String consumeText() {
         String text = inputField.getText().trim();
-        if (text.equals("Message")) return "";
         inputField.setText("");
         return text;
     }
 
+    /** Toggle mic button appearance between record and stop states. */
     public void setRecording(boolean rec) {
         this.recording = rec;
-        audioButton.setText(rec ? "Stop" : "Mic");
         audioButton.setForeground(rec ? ChatTheme.ACCENT : ChatTheme.TEXT_SECONDARY);
+        audioButton.repaint();
     }
 
     public void setSendListener(ActionListener l)  { sendButton.addActionListener(l); }
@@ -91,7 +91,7 @@ public class MessageInputPanel extends JPanel {
         audioButton.setEnabled(enabled);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Input field ───────────────────────────────────────────────────────────
 
     private JTextField createInputField() {
         JTextField f = new JTextField() {
@@ -131,62 +131,155 @@ public class MessageInputPanel extends JPanel {
         return f;
     }
 
+    // ── Icon buttons ──────────────────────────────────────────────────────────
+
     /**
-     * Small rectangular button with text label.
-     * Uses Swing's own rendering — no custom drawString — so text is guaranteed visible.
-     * Background matches the input bar so it blends in visually.
+     * File / paperclip button.
+     * Draws a small document rectangle with a folded corner.
      */
-    private JButton createIconButton(String label, Color fg) {
-        JButton btn = new JButton(label) {
+    private JButton createFileButton() {
+        JButton btn = new JButton() {
             @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                // Draw a subtle rounded dark background
-                g2.setColor(new Color(0x2A3942));
-                g2.fill(new RoundRectangle2D.Float(1, 1, getWidth() - 2, getHeight() - 2, 8, 8));
-                g2.dispose();
-                super.paintComponent(g);
+                Graphics2D g2 = setup(g);
+                try {
+                    g2.setColor(new Color(0x2A3942));
+                    g2.fill(new RoundRectangle2D.Float(2, 2, getWidth() - 4, getHeight() - 4, 10, 10));
+
+                    // Centre the icon
+                    int cx = getWidth() / 2, cy = getHeight() / 2;
+                    int w = 11, h = 14, fold = 4;
+
+                    // Left-top to fold, then to right-top (skipping corner), down, left, up
+                    int lx = cx - w / 2, ty = cy - h / 2;
+                    GeneralPath doc = new GeneralPath();
+                    doc.moveTo(lx, ty);
+                    doc.lineTo(lx + w - fold, ty);          // top edge (leaves fold gap)
+                    doc.lineTo(lx + w, ty + fold);          // diagonal fold
+                    doc.lineTo(lx + w, ty + h);             // right side
+                    doc.lineTo(lx, ty + h);                 // bottom
+                    doc.closePath();
+                    g2.setColor(isEnabled() ? ChatTheme.TEXT_SECONDARY : new Color(0x445566));
+                    g2.fill(doc);
+
+                    // Fold triangle (slightly lighter)
+                    GeneralPath corner = new GeneralPath();
+                    corner.moveTo(lx + w - fold, ty);
+                    corner.lineTo(lx + w - fold, ty + fold);
+                    corner.lineTo(lx + w, ty + fold);
+                    corner.closePath();
+                    g2.setColor(new Color(0x3D5465));
+                    g2.fill(corner);
+
+                    // Two horizontal lines on the doc
+                    g2.setColor(new Color(0x0D1117));
+                    g2.setStroke(new BasicStroke(1.2f));
+                    g2.drawLine(lx + 2, ty + h / 2,     lx + w - 2, ty + h / 2);
+                    g2.drawLine(lx + 2, ty + h / 2 + 3, lx + w - 2, ty + h / 2 + 3);
+                } finally {
+                    g2.dispose();
+                }
             }
         };
-        btn.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        btn.setForeground(fg);
+        styleIconButton(btn);
+        return btn;
+    }
+
+    /**
+     * Microphone button.
+     * When not recording: capsule body + stand arc.
+     * When recording:     filled square (stop icon).
+     */
+    private JButton createMicButton() {
+        JButton btn = new JButton() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = setup(g);
+                try {
+                    g2.setColor(new Color(0x2A3942));
+                    g2.fill(new RoundRectangle2D.Float(2, 2, getWidth() - 4, getHeight() - 4, 10, 10));
+
+                    int cx = getWidth() / 2, cy = getHeight() / 2;
+                    Color ic = isEnabled()
+                            ? (recording ? ChatTheme.ACCENT : ChatTheme.TEXT_SECONDARY)
+                            : new Color(0x445566);
+                    g2.setColor(ic);
+
+                    if (recording) {
+                        // Stop icon: filled rounded square
+                        int s = 10;
+                        g2.fill(new RoundRectangle2D.Float(cx - s / 2f, cy - s / 2f, s, s, 3, 3));
+                    } else {
+                        // Mic capsule
+                        int mw = 7, mh = 11;
+                        g2.fill(new RoundRectangle2D.Float(cx - mw / 2f, cy - mh / 2f - 2, mw, mh, mw, mw));
+                        // Stand arc
+                        g2.setStroke(new BasicStroke(1.5f));
+                        g2.draw(new Arc2D.Float(cx - 6, cy - 1, 12, 10, 0, -180, Arc2D.OPEN));
+                        // Vertical stem
+                        g2.drawLine(cx, cy + 9, cx, cy + 12);
+                        // Base line
+                        g2.drawLine(cx - 4, cy + 12, cx + 4, cy + 12);
+                    }
+                } finally {
+                    g2.dispose();
+                }
+            }
+        };
+        styleIconButton(btn);
+        return btn;
+    }
+
+    /**
+     * Send button — filled teal circle with a right-pointing triangle arrow.
+     * Drawn entirely with Graphics2D; no text, no font.
+     */
+    private JButton createSendButton() {
+        JButton btn = new JButton() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = setup(g);
+                try {
+                    // Teal circle background
+                    g2.setColor(isEnabled() ? ChatTheme.ACCENT : new Color(0x2A3942));
+                    g2.fill(new Ellipse2D.Float(1, 1, getWidth() - 2, getHeight() - 2));
+
+                    // Right-pointing filled triangle (paper-plane / send arrow)
+                    int cx = getWidth() / 2, cy = getHeight() / 2;
+                    int tw = 10, th = 10;
+                    GeneralPath arrow = new GeneralPath();
+                    arrow.moveTo(cx - tw / 2f + 1, cy - th / 2f);  // top-left
+                    arrow.lineTo(cx + tw / 2f + 2, cy);             // tip
+                    arrow.lineTo(cx - tw / 2f + 1, cy + th / 2f);  // bottom-left
+                    arrow.closePath();
+                    g2.setColor(Color.WHITE);
+                    g2.fill(arrow);
+                } finally {
+                    g2.dispose();
+                }
+            }
+        };
         btn.setOpaque(false);
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setPreferredSize(new Dimension(48, 38));
+        btn.setPreferredSize(new Dimension(42, 42));
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         return btn;
     }
 
-    /** Round teal send button — draws filled circle + "Send" text. */
-    private JButton createSendButton() {
-        JButton btn = new JButton("Send") {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                // Filled circle background
-                Color bg = isEnabled() ? ChatTheme.ACCENT : new Color(0x2A3942);
-                g2.setColor(bg);
-                g2.fill(new Ellipse2D.Float(0, 0, getWidth(), getHeight()));
-                // Draw label text centred
-                g2.setFont(new Font("Segoe UI", Font.BOLD, 11));
-                g2.setColor(Color.WHITE);
-                FontMetrics fm = g2.getFontMetrics();
-                String label = getText();
-                int tx = (getWidth()  - fm.stringWidth(label)) / 2;
-                int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
-                g2.drawString(label, tx, ty);
-                g2.dispose();
-                // Do NOT call super.paintComponent — we've drawn everything ourselves
-            }
-        };
+    // ── Shared helpers ────────────────────────────────────────────────────────
+
+    private static void styleIconButton(JButton btn) {
         btn.setOpaque(false);
         btn.setContentAreaFilled(false);
         btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setPreferredSize(new Dimension(52, 42));
+        btn.setPreferredSize(new Dimension(42, 42));
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        return btn;
     }
+
+    private static Graphics2D setup(Graphics g) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        return g2;
+    }
+
 }

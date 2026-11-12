@@ -1,33 +1,103 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Audio message bubble — self (right) or other (left) -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:padding="8dp"
-    android:gravity="center_vertical">
+    android:orientation="vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
 
-    <ImageButton
-        android:id="@+id/btnPlayAudio"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:src="@android:drawable/ic_media_play"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="@string/play_audio"/>
-
-    <TextView
-        android:id="@+id/tvAudioLabel"
-        android:layout_width="0dp"
+    <!-- ── Own audio (right) ─────────────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/layoutAudioSelf"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:text="@string/play_audio"
-        android:textSize="14sp"
-        android:paddingStart="8dp"/>
+        android:gravity="end"
+        android:orientation="horizontal"
+        android:visibility="gone">
 
-    <ProgressBar
-        android:id="@+id/progressAudioLoad"
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@drawable/bubble_self"
+            android:gravity="center_vertical"
+            android:minWidth="160dp"
+            android:elevation="2dp">
+
+            <ImageButton
+                android:id="@+id/btnPlayAudioSelf"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@android:drawable/ic_media_play"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/colorPrimary"
+                android:contentDescription="@string/play_audio"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/play_audio"
+                android:textSize="14sp"
+                android:textColor="@color/message_text_self"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"/>
+
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ── Sender name (received only) ──────────────────────────────────── -->
+    <TextView
+        android:id="@+id/tvAudioSenderName"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:textColor="@color/sender_name_color"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:paddingStart="4dp"
+        android:paddingBottom="2dp"
         android:visibility="gone"/>
+
+    <!-- ── Other user audio (left) ──────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/layoutAudioOther"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="start"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@drawable/bubble_other"
+            android:gravity="center_vertical"
+            android:minWidth="160dp"
+            android:elevation="2dp">
+
+            <ImageButton
+                android:id="@+id/btnPlayAudioOther"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:src="@android:drawable/ic_media_play"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/colorPrimary"
+                android:contentDescription="@string/play_audio"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/play_audio"
+                android:textSize="14sp"
+                android:textColor="@color/message_text_other"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"/>
+
+        </LinearLayout>
+    </LinearLayout>
 
 </LinearLayout>

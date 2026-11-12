@@ -27,21 +27,22 @@ public class OnlineUsersPanel extends JPanel {
 
     private final List<String> users = new ArrayList<>();
     private final UsersListPanel listPanel;
+    private final JLabel headerLabel;
 
     public OnlineUsersPanel() {
         super(new BorderLayout());
         setBackground(ChatTheme.BG_PANEL);
-        setPreferredSize(new Dimension(160, 0));
+        setPreferredSize(new Dimension(180, 0));
 
-        // Header
-        JLabel header = new JLabel("  Online", JLabel.LEFT);
-        header.setFont(ChatTheme.FONT_HEADER);
-        header.setForeground(ChatTheme.TEXT_PRIMARY);
-        header.setOpaque(true);
-        header.setBackground(ChatTheme.BG_HEADER);
-        header.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        header.setPreferredSize(new Dimension(0, 42));
-        add(header, BorderLayout.NORTH);
+        // Header — updated live with user count
+        headerLabel = new JLabel("  Online  0", JLabel.LEFT);
+        headerLabel.setFont(ChatTheme.FONT_HEADER);
+        headerLabel.setForeground(ChatTheme.TEXT_PRIMARY);
+        headerLabel.setOpaque(true);
+        headerLabel.setBackground(ChatTheme.BG_HEADER);
+        headerLabel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        headerLabel.setPreferredSize(new Dimension(0, 42));
+        add(headerLabel, BorderLayout.NORTH);
 
         listPanel = new UsersListPanel();
         JScrollPane sp = new JScrollPane(listPanel,
@@ -77,6 +78,7 @@ public class OnlineUsersPanel extends JPanel {
     }
 
     private void refresh() {
+        headerLabel.setText("  Online  " + users.size());
         listPanel.repaint();
         listPanel.revalidate();
     }
@@ -127,7 +129,7 @@ public class OnlineUsersPanel extends JPanel {
                 g2.setFont(new Font("Segoe UI", Font.BOLD, 14));
                 g2.setColor(Color.WHITE);
                 FontMetrics fm = g2.getFontMetrics();
-                String initial = user.substring(0, 1).toUpperCase();
+                String initial = (user == null || user.isEmpty()) ? "?" : user.substring(0, 1).toUpperCase();
                 int ix = ax + (AVATAR_R - fm.stringWidth(initial)) / 2;
                 int iy = ay + (AVATAR_R + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(initial, ix, iy);
@@ -147,7 +149,7 @@ public class OnlineUsersPanel extends JPanel {
         private Color avatarColor(String name) {
             int hash = name.hashCode() & 0x7FFFFFFF;
             Color[] palette = {
-                new Color(0x00A884), new Color(0x53BDEB), new Color(0xFC644D),
+                ChatTheme.ACCENT, new Color(0x53BDEB), new Color(0xFC644D),
                 new Color(0xFFA600), new Color(0x7C5DF9), new Color(0x37AEBE)
             };
             return palette[hash % palette.length];

@@ -178,12 +178,19 @@ public class LoginFrame extends JFrame implements MessageListener {
         if (message.getType() == MessageType.JOIN_SUCCESS) {
             String username = message.getSender();
             setStatus("Joined as " + username);
-            connectionManager.setListener(null);
+            // Build MainFrame FIRST, then swap the listener in a single step.
+            // Never set the listener to null — any USER_JOINED messages the server
+            // sends immediately after JOIN_SUCCESS would be silently dropped during
+            // the null window, so the newcomer's online-users sidebar would be empty.
             MainFrame mainFrame = new MainFrame(username, connectionManager);
-            connectionManager.setListener(mainFrame);
+            connectionManager.setListener(mainFrame);   // atomic swap, no null gap
             mainFrame.setVisible(true);
             dispose();
         } else if (message.getType() == MessageType.JOIN_ERROR) {
+            // Disconnect the stale socket so the next attempt opens a fresh connection.
+            // Without this, a second click would open a second TCP socket while the
+            // first ghost socket (that never sent JOIN_SUCCESS) sits open on the server.
+            connectionManager.disconnect();
             setStatus(message.getText());
             joinButton.setEnabled(true);
         }

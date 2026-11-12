@@ -25,6 +25,7 @@ public class AudioRecorder {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             recorder = new MediaRecorder(context);
         } else {
+            //noinspection deprecation — no-arg constructor is correct on API 26–30 (pre-S)
             recorder = new MediaRecorder();
         }
 
@@ -32,7 +33,13 @@ public class AudioRecorder {
         recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
         recorder.setOutputFile(outputFile.getAbsolutePath());
-        recorder.prepare();
+        try {
+            recorder.prepare();
+        } catch (IOException e) {
+            recorder.release();
+            recorder = null;
+            throw e; // propagate so caller can handle the failure
+        }
         recorder.start();
 
         return outputFile.getAbsolutePath();

@@ -6,11 +6,19 @@ A real-time messaging application built with Java. Desktop and Android users com
 
 ## Project Status
 
+<<<<<<< HEAD
 | Component | Technology |
 |---|---|
 | **Chat Server** | Java 21, TCP Sockets, Jackson  |
 | **Desktop Client** | Java 21, Swing |
 | **Mobile Client** | Java, Android (API 26–35) ||
+=======
+| Component | Technology | Status |
+|---|---|---|
+| **Chat Server** | Java 21, TCP Sockets, Jackson 2.17.2 | ✅ Complete — deployable fat JAR |
+| **Desktop Client** | Java 21, Swing (custom Graphics2D) | ✅ Complete — WhatsApp-style dark UI, fat JAR |
+| **Mobile Client** | Java, Android API 26–35 | ✅ Complete — debug APK builds clean |
+>>>>>>> 3246e30 (fix all bugs)
 
 ---
 
@@ -21,6 +29,7 @@ JavaChat/
 │
 ├── chat server/                  Java TCP Server — fully implemented
 │   ├── pom.xml
+│   ├── README.md                 Server-specific documentation
 │   ├── javachat.service          systemd unit for Linux VPS
 │   ├── vps-deploy.md             Step-by-step VPS deployment guide
 │   ├── chat-server-doc.md        Full technical documentation
@@ -37,7 +46,8 @@ JavaChat/
 │
 ├── client desktop/               Java Swing Desktop Client — fully implemented
 │   ├── pom.xml
-│   ├── client-desktop.md         Technical documentation
+│   ├── README.md                 Desktop client documentation
+│   ├── client-desktop.md         Detailed technical documentation
 │   └── src/main/java/com/javachat/desktop/
 │       ├── Main.java
 │       ├── config/               ClientConfig
@@ -51,7 +61,20 @@ JavaChat/
 │       └── util/                 SwingUtils · ChatTheme
 │
 ├── client-mobile/                Android Client (Java) — fully implemented
-└── README.md
+│   ├── README.md                 Mobile client documentation
+│   └── app/src/main/java/com/javachat/mobile/
+│       ├── MainActivity.java
+│       ├── config/               ClientConfig
+│       ├── network/              SocketClient · ConnectionManager · MessageListener
+│       ├── protocol/             Message · MessageType · ProtocolManager
+│       ├── ui/                   LoginActivity · ChatActivity · GlobalChatFragment
+│       │                         MessageAdapter · OnlineUsersAdapter
+│       ├── transfer/             FileTransferManager
+│       ├── audio/                AudioRecorder · AudioPlayer · AudioManager
+│       ├── ai/                   GeminiChatManager
+│       └── util/                 InputValidator · PermissionManager
+│
+└── README.md                     This file
 ```
 
 ---
@@ -90,7 +113,7 @@ All users share **one global chat room**. No private messaging. No groups.
 
 ### What it does
 
-- Accepts unlimited simultaneous TCP clients (one thread per client via `ExecutorService`).
+- Accepts up to 500 simultaneous TCP clients via a bounded `ThreadPoolExecutor` (core 10, max 500 threads).
 - Each client claims a unique username with a `JOIN` message — no password required.
 - Broadcasts real-time chat messages to all connected users.
 - Relays file transfers (up to 50 MB) and audio messages (up to 10 MB) between clients using Base64-encoded chunks — no data stored on disk.
@@ -119,12 +142,14 @@ java -jar "chat server/target/chat-server.jar"
 server.port=12345
 ```
 
-Gemini API key (optional — AI requests return an error if absent):
+Gemini API key (recommended — pass via environment, never hardcode):
 
 ```bash
 export GEMINI_API_KEY=your_key_here
-java -jar chat-server.jar
+java -jar "chat server/target/chat-server.jar"
 ```
+
+> ⚠️ **Security:** Never commit the API key in `application.properties`. Use the `GEMINI_API_KEY` environment variable in all deployments.
 
 ---
 
@@ -138,7 +163,7 @@ java -jar chat-server.jar
 - Own messages rendered as green bubbles (right-aligned); received messages as dark bubbles (left-aligned) with sender name.
 - File sharing: choose any file up to 50 MB via file picker, sent as 64 KB Base64 chunks.
 - Audio messages: record with Java Sound API (16 kHz PCM → `.wav`), 10 MB limit, playback in-app.
-- Gemini AI: type a `@ai` prompt in the input bar; response appears as a distinct AI bubble.
+- Gemini AI: type a prompt in the AI bar; response appears as a distinct AI bubble.
 - Reconnect dialog on unexpected disconnection.
 - Never blocks the Swing EDT — all network I/O on background threads.
 
@@ -156,6 +181,28 @@ java -jar "client desktop/target/client-desktop.jar"
 ```
 
 By default connects to `127.0.0.1:12345`. Edit [`ClientConfig.java`](client%20desktop/src/main/java/com/javachat/desktop/config/ClientConfig.java) to change the server address.
+
+---
+
+## Mobile Client
+
+### What it does
+
+- Login screen: enter username, server IP, and port.
+- Global chat room with WhatsApp-style message bubbles (green own, white others, grey system).
+- File sharing: attach and send any file up to 50 MB; receivers get a Download button.
+- Audio messages: record `.m4a` voice messages up to 10 MB; play back in-app.
+- Gemini AI assistant accessible from the chat toolbar.
+- Live online users drawer with presence notifications.
+- Handles API 26–35 (Android 8.0–15).
+
+### How to build
+
+```bash
+cd client-mobile
+./gradlew assembleDebug
+# Produces: app/build/outputs/apk/debug/app-debug.apk
+```
 
 ---
 
@@ -185,15 +232,15 @@ Null fields are omitted from the wire format (`@JsonInclude(NON_NULL)`).
 | `JOIN_SUCCESS` | Server → Client | Username accepted. |
 | `JOIN_ERROR` | Server → Client | Username taken or invalid. Field: `text` = reason. Client may retry. |
 | `CHAT` | Client → Server | Send a message. Field: `text`. |
-| `CHAT` | Server → all | Broadcast with `messageId`, `sender`, `text`, `timestamp`. |
+| `CHAT` | Server → all others | Broadcast with `messageId`, `sender`, `text`, `timestamp`. |
 | `USER_JOINED` | Server → all others | Presence notification. |
 | `USER_LEFT` | Server → all others | Presence notification. |
 | `ERROR` | Server → Client | Validation or protocol error. |
 | `FILE_META` | Client → Server | Start a file transfer. Fields: `fileId`, `fileName`, `fileSize`, `totalChunks`. |
-| `FILE_CHUNK` | Client → Server | File data chunk. Fields: `fileId`, `chunkIndex`, `data` (Base64). |
+| `FILE_CHUNK` | Client ↔ Server ↔ Client | File data chunk. Fields: `fileId`, `chunkIndex`, `data` (Base64). |
 | `FILE_COMPLETE` | Client → Server | End of transfer. Field: `fileId`. |
 | `AUDIO_META` | Client → Server | Start an audio transfer. Same fields as `FILE_META`. |
-| `AUDIO_CHUNK` | Client → Server | Audio data chunk. Same fields as `FILE_CHUNK`. |
+| `AUDIO_CHUNK` | Client ↔ Server ↔ Client | Audio data chunk. Same fields as `FILE_CHUNK`. |
 | `AUDIO_COMPLETE` | Client → Server | End of audio transfer. Field: `fileId`. |
 | `AI_REQUEST` | Client → Server | Ask the AI assistant. Field: `prompt`. |
 | `AI_RESPONSE` | Server → Client | AI answer (only to the requester). Field: `text`. |
@@ -208,10 +255,12 @@ Client                              Server
   │◀── JOIN_SUCCESS ────────────────
   │                   ◀── USER_JOINED (broadcast to others)
   │── CHAT {"text":"Hello"} ─────── ▶
-  │◀── CHAT (broadcast back) ───────
+  │◀── CHAT (broadcast to others) ──
   │    [disconnect]
   │                   ◀── USER_LEFT (broadcast to others)
 ```
+
+> **Note:** The server uses `broadcastExcept(sender)` — the sender does **not** receive an echo of their own CHAT message. Desktop and mobile clients add their own message locally for instant feedback.
 
 ### Validation limits
 
@@ -227,19 +276,39 @@ Client                              Server
 
 ---
 
+## Known Issues
+
+### Desktop Client
+
+| # | Severity | Description |
+|---|---|---|
+| — | 🟠 Medium | File transfer progress not visualised (no progress bar during chunked send) |
+| — | 🟠 Medium | No automatic reconnect retry — user must click dialog to return to login |
+| — | 🟠 Medium | Server address requires rebuild to change (`ClientConfig.java` hardcoded) |
+
+### Chat Server
+
+| # | Severity | Description |
+|---|---|---|
+| — | 🟢 Low | No cumulative chunk-size validation — sender can declare `fileSize=1MB` then stream 50 MB |
+| — | 🟢 Low | No in-flight transfer cleanup on disconnect — partial transfers remain in memory |
+| — | 🟢 Low | Audio extension check only validates final segment — `name.exe.m4a` passes allowlist |
+
+---
+
 ## Technologies
 
 | Component | Technology | Version |
 |---|---|---|
 | Server language | Java | 21 |
 | Desktop language | Java | 21 |
-| Mobile language | Java | Android SDK |
+| Mobile language | Java | Android SDK (API 26–35) |
 | Transport | TCP Sockets | — |
 | Message format | JSON (newline-delimited) | — |
 | JSON library | Jackson Databind | 2.17.2 |
 | AI integration | Gemini API (gemini-2.0-flash) | v1beta |
 | Build (server / desktop) | Maven | 3.x |
-| Build (mobile) | Gradle | — |
+| Build (mobile) | Gradle | 8.x |
 | Logging | java.util.logging | JDK built-in |
 | Deployment | Linux VPS + systemd | — |
 
@@ -250,14 +319,15 @@ Client                              Server
 | Decision | Rationale |
 |---|---|
 | One global room | Simplicity — no room management needed |
-| No password authentication | Username uniqueness is enforced in memory; freed on disconnect |
+| No password authentication | Username uniqueness enforced in memory; freed on disconnect |
 | No database | No persistent state — all session data lives in RAM |
 | No private messaging | Out of scope for this project |
 | Base64 chunk relay | Keeps the protocol purely JSON; avoids a separate binary channel |
 | Server-side Gemini calls | API key never exposed to clients |
-| ConcurrentHashMap for clients | Lock-free reads; `putIfAbsent` guarantees atomic username claim |
-| One thread per client | Simple and correct; `CachedThreadPool` reuses threads |
+| `ConcurrentHashMap` for clients | Lock-free reads; `putIfAbsent` guarantees atomic username claim |
+| Bounded `ThreadPoolExecutor` (max 500) | Caps concurrent threads; `CallerRunsPolicy` backpressures gracefully |
 | Custom-painted Swing UI | WhatsApp-style look without third-party LAF dependencies |
+| `broadcastExcept(sender)` | Avoids echo; clients add their own message locally for instant feedback |
 
 ---
 
@@ -283,10 +353,12 @@ ssh user@VPS "sudo systemctl restart javachat"
 | File | Contents |
 |---|---|
 | [`README.md`](README.md) | This file — project overview, protocol, technologies |
+| [`chat server/README.md`](chat%20server/README.md) | Chat server — architecture, classes, security, deployment |
 | [`chat server/chat-server-doc.md`](chat%20server/chat-server-doc.md) | Full technical documentation — every class, method, config option |
 | [`chat server/vps-deploy.md`](chat%20server/vps-deploy.md) | Step-by-step VPS deployment guide including TLS setup |
-| [`client desktop/client-desktop.md`](client%20desktop/client-desktop.md) | Desktop client — architecture, phases, build instructions |
-| [`client-mobile/README.md`](client-mobile/README.md) | Android client — build instructions, architecture, permissions |
+| [`client desktop/README.md`](client%20desktop/README.md) | Desktop client — architecture, UI, build, known gaps |
+| [`client desktop/client-desktop.md`](client%20desktop/client-desktop.md) | Desktop client — detailed technical phases and implementation notes |
+| [`client-mobile/README.md`](client-mobile/README.md) | Android client — build instructions, architecture, permissions, known issues |
 
 ---
 

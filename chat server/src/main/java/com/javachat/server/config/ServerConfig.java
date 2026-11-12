@@ -24,6 +24,15 @@ public class ServerConfig {
         } catch (IOException | NumberFormatException ignored) {
             // fall back to default
         }
+        // SERVER_PORT env var overrides application.properties — useful for containerized deployments
+        String envPort = System.getenv("SERVER_PORT");
+        if (envPort != null && !envPort.isBlank()) {
+            try {
+                resolvedPort = Integer.parseInt(envPort.trim());
+            } catch (NumberFormatException ignored) {
+                // malformed env var — keep properties/default value
+            }
+        }
         this.port = resolvedPort;
     }
 

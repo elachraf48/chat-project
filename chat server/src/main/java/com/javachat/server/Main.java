@@ -29,6 +29,7 @@ public class Main {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             Logger.info("[JavaChat Server] Shutting down...");
             chatServer.stop();
+            Logger.info("[JavaChat Server] Shutdown complete.");
         }));
 
         Logger.info("Server ready — waiting for clients...");

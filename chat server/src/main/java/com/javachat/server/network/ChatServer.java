@@ -12,7 +12,10 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class ChatServer {
 
@@ -38,23 +41,34 @@ public class ChatServer {
     }
 
     public void start() throws IOException {
-        serverSocket = new ServerSocket(config.getPort());
-        executor = Executors.newCachedThreadPool();
+        serverSocket = new ServerSocket(config.getPort(), 256);
+        executor = new ThreadPoolExecutor(
+                10, 500,
+                60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
         Logger.info("Server listening on port " + config.getPort());
 
         while (!serverSocket.isClosed()) {
             try {
                 Socket socket = serverSocket.accept();
                 Logger.info("[CONNECT] " + socket.getRemoteSocketAddress());
-                executor.submit(new ClientHandler(
-                        socket,
-                        clientManager,
-                        userService,
-                        globalChatRoom,
-                        fileTransferManager,
-                        audioTransferManager,
-                        geminiService
-                ));
+                try {
+                    executor.submit(new ClientHandler(
+                            socket,
+                            clientManager,
+                            userService,
+                            globalChatRoom,
+                            fileTransferManager,
+                            audioTransferManager,
+                            geminiService
+                    ));
+                } catch (RejectedExecutionException e) {
+                    // Executor is shutting down; close the accepted socket immediately
+                    Logger.warn("[CONNECT] Rejected — server is shutting down.");
+                    try { socket.close(); } catch (IOException ignored) {}
+                }
             } catch (IOException e) {
                 if (serverSocket.isClosed()) {
                     break;
@@ -67,6 +81,16 @@ public class ChatServer {
     public void stop() {
         if (executor != null) {
             executor.shutdown();
+            try {
+                if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                    Logger.warn("[Server] Executor did not terminate in 30s — forcing shutdown.");
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Logger.warn("[Server] Interrupted during executor shutdown — forcing shutdown.");
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
         if (serverSocket != null && !serverSocket.isClosed()) {
             try {

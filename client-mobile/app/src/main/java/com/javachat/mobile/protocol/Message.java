@@ -32,6 +32,10 @@ public class Message {
     // AI — name matches server exactly
     private String prompt;        // server requires "prompt" not "text"
 
+    // Client-only transient flag — NOT serialized, not sent over the wire
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String tag;
+
     // Required by Jackson
     public Message() {}
 
@@ -160,4 +164,8 @@ public class Message {
 
     public String getPrompt()                       { return prompt; }
     public void setPrompt(String prompt)            { this.prompt = prompt; }
+
+    /** Client-only tag — not sent over the wire. Used to track UI state (e.g. "saved"). */
+    public String getTag()                          { return tag; }
+    public void setTag(String tag)                  { this.tag = tag; }
 }

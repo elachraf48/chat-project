@@ -19,7 +19,11 @@ public class GlobalChatRoom {
      */
     public void broadcast(String senderUsername, String text) {
         Message message = Message.chat(senderUsername, text);
-        Logger.info("[CHAT] " + senderUsername + ": " + text);
+        // Sanitize text before logging to prevent log injection via ANSI/newline sequences
+        String safeText = text.replace("\r", "\\r").replace("\n", "\\n");
+        Logger.info("[CHAT] " + senderUsername + ": "
+                + safeText.substring(0, Math.min(safeText.length(), 80))
+                + (safeText.length() > 80 ? "…" : ""));
         clientManager.broadcastExcept(senderUsername, message);
     }
 }

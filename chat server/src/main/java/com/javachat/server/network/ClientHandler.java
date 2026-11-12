@@ -69,8 +69,10 @@ public class ClientHandler implements Runnable {
 
     @Override
     public void run() {
+        BufferedReader reader = null;
         try {
-            BufferedReader reader = new BufferedReader(
+            socket.setSoTimeout(300_000); // 5-minute read timeout — prevents zombie / slow-read connections
+            reader = new BufferedReader(
                     new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
             writer = new PrintWriter(
                     new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
@@ -94,9 +96,8 @@ public class ClientHandler implements Runnable {
                 userService.leave(username);
                 clientManager.broadcast(Message.userLeft(username));
             }
-            try {
-                socket.close();
-            } catch (IOException ignored) {}
+            try { if (reader != null) reader.close(); } catch (IOException ignored) {}
+            try { socket.close(); } catch (IOException ignored) {}
         }
     }
 
@@ -272,8 +273,9 @@ public class ClientHandler implements Runnable {
         Logger.info("[AI_REQUEST] " + username + ": " + prompt.substring(0, Math.min(prompt.length(), 80))
                 + (prompt.length() > 80 ? "…" : ""));
 
-        // Call Gemini synchronously on the client's thread (each client has its own thread)
-        String response = geminiService.generate(prompt);
+        // Call Gemini synchronously on the client's thread (each client has its own thread).
+        // Pass username for per-user rate limiting.
+        String response = geminiService.generate(username, prompt);
 
         Logger.info("[AI_RESPONSE] → " + username);
         sendMessage(Message.aiResponse(response));

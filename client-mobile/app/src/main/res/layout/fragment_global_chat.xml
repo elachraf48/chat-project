@@ -4,38 +4,49 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/white">
+    android:background="@color/background_chat">
 
+    <!-- Message list — takes all remaining space -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvMessages"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp"
-        android:clipToPadding="false"/>
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:clipToPadding="false"
+        android:scrollbars="vertical"/>
 
+    <!-- Thin divider above input bar -->
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/divider_color"/>
 
-    <!-- Message input bar -->
+    <!-- ── Input bar ──────────────────────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:background="@color/input_background"
-        android:padding="4dp"
-        android:gravity="center_vertical">
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:gravity="center_vertical"
+        android:elevation="4dp">
 
+        <!-- Attach (file) -->
         <ImageButton
             android:id="@+id/btnAttach"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:src="@android:drawable/ic_menu_add"
             android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/colorPrimary"
             android:contentDescription="@string/btn_attach"/>
 
+        <!-- Text input with rounded background -->
         <EditText
             android:id="@+id/etMessageInput"
             android:layout_width="0dp"
@@ -44,35 +55,48 @@
             android:hint="@string/hint_message"
             android:inputType="textMultiLine|textCapSentences"
             android:maxLines="4"
-            android:background="@android:color/transparent"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"/>
+            android:background="@drawable/bg_input_field"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:textSize="15sp"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"/>
 
+        <!-- Record audio -->
         <ImageButton
             android:id="@+id/btnRecord"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:src="@android:drawable/ic_btn_speak_now"
             android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/colorPrimary"
             android:contentDescription="@string/btn_record"/>
 
+        <!-- Gemini AI -->
         <ImageButton
             android:id="@+id/btnAi"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:src="@android:drawable/ic_menu_help"
             android:background="?attr/selectableItemBackgroundBorderless"
+            android:tint="@color/colorPrimary"
             android:contentDescription="@string/btn_ai"/>
 
+        <!-- Send button — teal rounded pill -->
         <Button
             android:id="@+id/btnSend"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
             android:text="@string/btn_send"
-            android:backgroundTint="@color/colorPrimary"
+            android:backgroundTint="@color/colorAccent"
             android:textColor="@color/white"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"/>
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:stateListAnimator="@null"/>
 
     </LinearLayout>
 

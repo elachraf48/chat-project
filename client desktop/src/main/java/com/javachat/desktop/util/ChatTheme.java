@@ -37,7 +37,20 @@ public final class ChatTheme {
     // ── Accent ────────────────────────────────────────────────────────────────
     /** WhatsApp brand green */
     public static final Color ACCENT         = new Color(0x00A884);
-    public static final Color ACCENT_HOVER   = new Color(0x00CF9D);
+    // ACCENT_HOVER reserved for future hover states — not currently used
+    // public static final Color ACCENT_HOVER   = new Color(0x00CF9D);
+
+    // ── Structural / component colors ─────────────────────────────────────────
+    /** Separator lines and hover highlight in sidebars */
+    public static final Color BORDER         = new Color(0x2A3942);
+    /** System message bubble background (notification pills) */
+    public static final Color BG_SYSTEM_BUBBLE = new Color(0x2A3942);
+    /** AI response bubble background */
+    public static final Color BG_AI_BUBBLE   = new Color(0x1A2A32);
+    /** AI bubble gradient end shade */
+    public static final Color BG_AI_STRIPE   = new Color(0x223340);
+    /** Disabled/inactive button overlay */
+    public static final Color BTN_DISABLED   = new Color(0x445566);
 
     // ── Fonts ─────────────────────────────────────────────────────────────────
     public static final Font FONT_MESSAGE    = new Font("Segoe UI", Font.PLAIN,  13);

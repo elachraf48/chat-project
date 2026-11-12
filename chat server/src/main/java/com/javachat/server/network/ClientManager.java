@@ -71,7 +71,9 @@ public class ClientManager {
         try {
             return ProtocolManager.serialize(message);
         } catch (IOException e) {
-            Logger.error("Failed to serialize message: " + e.getMessage());
+            Logger.error("SEVERE: Failed to serialize message of type "
+                    + (message != null ? message.getType() : "null")
+                    + " — broadcast dropped: " + e.getMessage());
             return null;
         }
     }

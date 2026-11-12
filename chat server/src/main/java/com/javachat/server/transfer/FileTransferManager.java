@@ -48,6 +48,10 @@ public class FileTransferManager {
         if (fileId == null || fileId.isBlank()) {
             return "FILE_META: fileId must not be empty.";
         }
+        // Validate fileId is a well-formed UUID to prevent log injection / misuse
+        try { java.util.UUID.fromString(fileId); }
+        catch (IllegalArgumentException e) { return "FILE_META: fileId must be a valid UUID."; }
+
         if (fileName == null || fileName.isBlank()) {
             return "FILE_META: fileName must not be empty.";
         }
@@ -61,7 +65,9 @@ public class FileTransferManager {
             return "FILE_META: totalChunks must be > 0.";
         }
 
-        Logger.info("[FILE_META] " + senderUsername + " → \"" + fileName
+        // Sanitize fileName before logging to prevent log injection
+        String safeFileName = fileName.replace("\n", "\\n").replace("\r", "\\r");
+        Logger.info("[FILE_META] " + senderUsername + " → \"" + safeFileName
                 + "\" (" + fileSize + " bytes, " + totalChunks + " chunks) [" + fileId + "]");
 
         // Relay to all other clients
@@ -84,6 +90,8 @@ public class FileTransferManager {
         if (fileId == null || fileId.isBlank()) {
             return "FILE_CHUNK: fileId must not be empty.";
         }
+        try { java.util.UUID.fromString(fileId); }
+        catch (IllegalArgumentException e) { return "FILE_CHUNK: fileId must be a valid UUID."; }
         if (chunkIdx == null || chunkIdx < 0) {
             return "FILE_CHUNK: chunkIndex must be >= 0.";
         }
@@ -108,6 +116,8 @@ public class FileTransferManager {
         if (fileId == null || fileId.isBlank()) {
             return "FILE_COMPLETE: fileId must not be empty.";
         }
+        try { java.util.UUID.fromString(fileId); }
+        catch (IllegalArgumentException e) { return "FILE_COMPLETE: fileId must be a valid UUID."; }
 
         Logger.info("[FILE_COMPLETE] " + senderUsername + " finished transfer [" + fileId + "]");
         clientManager.broadcastExcept(senderUsername,

@@ -90,7 +90,7 @@ public class GlobalChatFragment extends Fragment {
         btnAi          = view.findViewById(R.id.btnAi);
 
         String myUsername = AuthenticationManager.getInstance().getUsername();
-        messageAdapter = new MessageAdapter(messages, myUsername);
+        messageAdapter = new MessageAdapter(messages, myUsername, this::onDownloadFile);
         LinearLayoutManager lm = new LinearLayoutManager(requireContext());
         lm.setStackFromEnd(true);
         rvMessages.setLayoutManager(lm);
@@ -146,14 +146,15 @@ public class GlobalChatFragment extends Fragment {
                 FileTransferManager.getInstance().handleIncoming(message, requireContext());
                 break;
 
-            case FILE_COMPLETE:
-                // Look up fileName from META *before* handleIncoming() removes the meta entry
+            case FILE_COMPLETE: {
+                // Assemble bytes first, then show a file bubble (receiver taps Download to save)
                 String fileName = FileTransferManager.getInstance()
                         .getFileNameForId(message.getFileId());
-                if (fileName == null || fileName.isEmpty()) fileName = "file";
                 FileTransferManager.getInstance().handleIncoming(message, requireContext());
-                addSystemMessage(getString(R.string.file_received, fileName));
+                addFileMessage(message.getSender(), message.getFileId(),
+                        fileName, message.getTimestamp());
                 break;
+            }
 
             case AUDIO_META:
             case AUDIO_CHUNK:
@@ -196,17 +197,25 @@ public class GlobalChatFragment extends Fragment {
 
     private void onFileSelected(Uri uri) {
         if (uri == null) return;
+        String myUsername = AuthenticationManager.getInstance().getUsername();
         FileTransferManager.getInstance().sendFile(uri, requireContext(),
                 new FileTransferManager.TransferCallback() {
                     @Override
                     public void onSendComplete(String fileName) {
-                        requireActivity().runOnUiThread(() ->
-                                addSystemMessage(getString(R.string.file_sent, fileName)));
+                        if (!isAdded()) return;
+                        requireActivity().runOnUiThread(() -> {
+                            if (!isAdded()) return;
+                            addFileMessage(myUsername, null, fileName,
+                                    java.time.Instant.now().toString());
+                        });
                     }
                     @Override
                     public void onSendFailed(String fileName) {
-                        requireActivity().runOnUiThread(() ->
-                                addSystemMessage(getString(R.string.file_send_failed, fileName)));
+                        if (!isAdded()) return;
+                        requireActivity().runOnUiThread(() -> {
+                            if (!isAdded()) return;
+                            addSystemMessage(getString(R.string.file_send_failed, fileName));
+                        });
                     }
                 });
     }
@@ -254,14 +263,16 @@ public class GlobalChatFragment extends Fragment {
             btnAsk.setOnClickListener(v -> {
                 String prompt = etPrompt.getText().toString().trim();
                 if (prompt.isEmpty()) return;
-                progressAi.setVisibility(View.VISIBLE);
-                tvAiResponse.setVisibility(View.GONE);
+                if (progressAi != null) progressAi.setVisibility(View.VISIBLE);
+                if (tvAiResponse != null) tvAiResponse.setVisibility(View.GONE);
                 btnAsk.setEnabled(false);
                 GeminiChatManager.getInstance().sendRequest(prompt, response -> {
                     if (aiDialog != null && aiDialog.isShowing()) {
-                        tvAiResponse.setText(response);
-                        tvAiResponse.setVisibility(View.VISIBLE);
-                        progressAi.setVisibility(View.GONE);
+                        if (tvAiResponse != null) {
+                            tvAiResponse.setText(response);
+                            tvAiResponse.setVisibility(View.VISIBLE);
+                        }
+                        if (progressAi != null) progressAi.setVisibility(View.GONE);
                         btnAsk.setEnabled(true);
                     }
                 });
@@ -277,8 +288,11 @@ public class GlobalChatFragment extends Fragment {
 
     private void addMessage(Message message) {
         messages.add(message);
-        messageAdapter.notifyItemInserted(messages.size() - 1);
-        rvMessages.scrollToPosition(messages.size() - 1);
+        int pos = messages.size() - 1;
+        messageAdapter.notifyItemInserted(pos);
+        // scrollToPosition is instant but may not update the viewport if the layout
+        // has not yet measured the new item. Post to queue to run after layout pass.
+        rvMessages.post(() -> rvMessages.scrollToPosition(pos));
     }
 
     /**
@@ -294,7 +308,21 @@ public class GlobalChatFragment extends Fragment {
     }
 
     /**
-     * IMP 12: add an AUDIO_COMPLETE entry that MessageAdapter renders with a play button.
+     * Add a FILE_COMPLETE entry so MessageAdapter renders a file bubble.
+     * Sender (isSelf) sees a right-aligned bubble; receiver sees left-aligned + Download button.
+     */
+    private void addFileMessage(String sender, String fileId, String fileName, String timestamp) {
+        Message m = new Message();
+        m.setType(MessageType.FILE_COMPLETE);
+        m.setSender(sender);
+        m.setFileId(fileId);
+        m.setFileName(fileName != null ? fileName : "file");
+        m.setTimestamp(timestamp);
+        addMessage(m);
+    }
+
+    /**
+     * Add an AUDIO_COMPLETE entry that MessageAdapter renders with a play button.
      */
     private void addAudioMessage(Message message) {
         // Wrap as AUDIO_COMPLETE so MessageAdapter can show the audio item layout
@@ -304,6 +332,18 @@ public class GlobalChatFragment extends Fragment {
         m.setFileId(message.getFileId());
         m.setTimestamp(message.getTimestamp());
         addMessage(m);
+    }
+
+    /**
+     * DownloadClickListener — called by MessageAdapter when user taps Download on a file bubble.
+     * Saves the file, then marks the message tag="saved" so the button changes to "✓ Saved".
+     */
+    private void onDownloadFile(Message message) {
+        FileTransferManager.getInstance().saveReceivedFile(message.getFileId(), requireContext());
+        message.setTag("saved");
+        // Refresh the specific item so the Download button updates to "✓ Saved"
+        int idx = messages.indexOf(message);
+        if (idx >= 0) messageAdapter.notifyItemChanged(idx);
     }
 
     /** Called by ChatActivity after the fragment is attached so the user sees themselves in the list. */

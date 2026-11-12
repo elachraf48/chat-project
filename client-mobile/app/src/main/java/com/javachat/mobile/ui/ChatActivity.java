@@ -41,6 +41,7 @@ public class ChatActivity extends AppCompatActivity implements MessageListener {
         drawerLayout = findViewById(R.id.drawerLayout);
 
         ConnectionManager.getInstance().setListener(this);
+        ConnectionManager.getInstance().setNotificationContext(this);
 
         if (savedInstanceState == null) {
             // commitNow() runs the transaction synchronously so onViewCreated fires before we
@@ -103,10 +104,10 @@ public class ChatActivity extends AppCompatActivity implements MessageListener {
     @Override
     public void onConnectionLost(String reason) {
         new AlertDialog.Builder(this)
-                .setTitle("Disconnected")
-                .setMessage("Lost connection to server.")
-                .setPositiveButton("Reconnect", (d, w) -> returnToLogin())
-                .setNegativeButton("Exit", (d, w) -> finish())
+                .setTitle(getString(R.string.disconnected_title))
+                .setMessage(getString(R.string.disconnected_msg))
+                .setPositiveButton(R.string.btn_reconnect, (d, w) -> returnToLogin())
+                .setNegativeButton(R.string.btn_exit, (d, w) -> finish())
                 .setCancelable(false)
                 .show();
     }

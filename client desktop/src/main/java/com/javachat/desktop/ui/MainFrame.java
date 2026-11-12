@@ -20,6 +20,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.WindowConstants;
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -31,6 +32,7 @@ import java.awt.RenderingHints;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.geom.Ellipse2D;
+import java.awt.geom.GeneralPath;
 import java.awt.geom.RoundRectangle2D;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -69,12 +71,10 @@ public class MainFrame extends JFrame implements MessageListener {
 
         fileTransferManager.setProgressListener(new FileProgressListener() {
             @Override public void onProgress(String f, long sent, long total) {
-                int pct = (int) (sent * 100 / total);
-                SwingUtils.runOnEDT(() ->
-                    chatPanel.appendNotification("Sending " + f + " … " + pct + "%"));
+                // silent — file bubble already shown at send time
             }
             @Override public void onComplete(String f) {
-                SwingUtils.runOnEDT(() -> chatPanel.appendNotification("✓ File sent: " + f));
+                // file bubble already shown; nothing extra needed
             }
             @Override public void onError(String f, String reason) {
                 SwingUtils.runOnEDT(() ->
@@ -144,8 +144,18 @@ public class MainFrame extends JFrame implements MessageListener {
                 chatPanel.appendNotification(message.getSender() + " joined the chat.");
             }
             case USER_LEFT -> {
-                chatPanel.removeUser(message.getSender());
-                chatPanel.appendNotification(message.getSender() + " left the chat.");
+                String leftUser = message.getSender();
+                chatPanel.removeUser(leftUser);
+                chatPanel.appendNotification((leftUser != null ? leftUser : "Unknown") + " left the chat.");
+                // Clean up any in-progress file transfers from this sender.
+                // Audio buffers cannot be sender-matched (server AUDIO_META relay omits sender
+                // in the buffer key), so orphaned audio buffers are left to complete or be
+                // discarded on AUDIO_CHUNK decode failure.
+                if (leftUser != null) {
+                    fileMeta.entrySet().removeIf(e -> leftUser.equals(e.getValue().getSender())
+                            && fileBuffers.remove(e.getKey()) != null);
+                    fileMeta.entrySet().removeIf(e -> leftUser.equals(e.getValue().getSender()));
+                }
             }
 
             // ── File receive ──────────────────────────────────────────────
@@ -154,9 +164,7 @@ public class MainFrame extends JFrame implements MessageListener {
                 if (fid != null) {
                     fileBuffers.put(fid, new java.io.ByteArrayOutputStream());
                     fileMeta.put(fid, message);
-                    chatPanel.appendNotification(message.getSender()
-                            + " is sending: " + message.getFileName()
-                            + " (" + humanSize(message.getFileSize()) + ")");
+                    // No bubble yet — wait for FILE_COMPLETE so we can show the Download button
                 }
             }
             case FILE_CHUNK -> {
@@ -164,15 +172,29 @@ public class MainFrame extends JFrame implements MessageListener {
                 var buf = fid != null ? fileBuffers.get(fid) : null;
                 if (buf != null && message.getData() != null) {
                     try { buf.write(Base64.getDecoder().decode(message.getData())); }
-                    catch (Exception ignored) {}
+                    catch (Exception e) {
+                        // Corrupted chunk — discard the entire transfer
+                        System.err.println("[WARN] File chunk decode error for fid=" + fid + ": " + e.getMessage());
+                        fileBuffers.remove(fid);
+                        fileMeta.remove(fid);
+                        chatPanel.appendNotification("[File error] Transfer corrupted, discarded.");
+                    }
                 }
             }
             case FILE_COMPLETE -> {
-                String fid = message.getFileId();
+                // All chunks received — upgrade the bubble to show a Download button.
+                // We can't retroactively mutate the existing bubble, so we add a new one.
+                String fid  = message.getFileId();
                 var buf  = fid != null ? fileBuffers.remove(fid) : null;
                 var meta = fid != null ? fileMeta.remove(fid)    : null;
-                if (buf != null && meta != null)
-                    saveReceivedFile(meta.getFileName(), buf.toByteArray(), meta.getSender());
+                if (buf != null && meta != null) {
+                    final byte[] data     = buf.toByteArray();
+                    final String sender   = meta.getSender();
+                    final String fileName = meta.getFileName();
+                    final long   fileSize = data.length;
+                    chatPanel.appendFileBubble(sender, fileName, fileSize,
+                        ignored -> saveReceivedFile(fileName, data, sender));
+                }
             }
 
             // ── Audio receive ─────────────────────────────────────────────
@@ -180,7 +202,6 @@ public class MainFrame extends JFrame implements MessageListener {
                 String fid = message.getFileId();
                 if (fid != null) {
                     audioBuffers.put(fid, new java.io.ByteArrayOutputStream());
-                    chatPanel.appendNotification(message.getSender() + " sent a voice message.");
                 }
             }
             case AUDIO_CHUNK -> {
@@ -188,25 +209,33 @@ public class MainFrame extends JFrame implements MessageListener {
                 var buf = fid != null ? audioBuffers.get(fid) : null;
                 if (buf != null && message.getData() != null) {
                     try { buf.write(Base64.getDecoder().decode(message.getData())); }
-                    catch (Exception ignored) {}
+                    catch (Exception e) {
+                        // Corrupted chunk — discard the entire transfer
+                        System.err.println("[WARN] Audio chunk decode error for fid=" + fid + ": " + e.getMessage());
+                        audioBuffers.remove(fid);
+                        chatPanel.appendNotification("[Audio error] Transfer corrupted, discarded.");
+                    }
                 }
             }
             case AUDIO_COMPLETE -> {
+                // All audio chunks received — show bubble with Play button
                 String fid = message.getFileId();
                 var buf = fid != null ? audioBuffers.remove(fid) : null;
                 if (buf != null) {
-                    chatPanel.appendNotification("▶ Playing voice message…");
-                    audioManager.playReceived(buf.toByteArray());
+                    final byte[] pcmData = buf.toByteArray();
+                    final String sender  = message.getSender() != null ? message.getSender() : "";
+                    chatPanel.appendAudioBubble(sender,
+                        ignored -> audioManager.playReceived(pcmData));
                 }
             }
 
             // ── AI ────────────────────────────────────────────────────────
             case AI_RESPONSE ->
-                chatPanel.appendNotification("✦ Gemini: " + message.getText());
+                chatPanel.appendAiResponse(message.getText() != null ? message.getText() : "");
 
             // ── Error ─────────────────────────────────────────────────────
             case ERROR ->
-                chatPanel.appendNotification("⚠ " + message.getText());
+                chatPanel.appendNotification("Error: " + message.getText());
 
             default -> {}
         }
@@ -216,7 +245,7 @@ public class MainFrame extends JFrame implements MessageListener {
     // UI builders
     // =========================================================================
 
-    /** Dark header bar with room name + connected-as label. */
+    /** Dark header bar with room name + connected-as label + sidebar toggle. */
     private JPanel buildHeader() {
         JPanel header = new JPanel(new BorderLayout(8, 0)) {
             @Override protected void paintComponent(Graphics g) {
@@ -227,17 +256,51 @@ public class MainFrame extends JFrame implements MessageListener {
         header.setOpaque(false);
         header.setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
 
-        // Avatar circle + room name
-        JLabel room = new JLabel("  Global Chat");
+        // Sidebar toggle button — three horizontal lines drawn with Graphics2D (no font)
+        JButton toggleBtn = new JButton() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                if (getModel().isRollover()) {
+                    g2.setColor(new Color(0x2A3942));
+                    g2.fill(new RoundRectangle2D.Float(1, 1, getWidth()-2, getHeight()-2, 8, 8));
+                }
+                // Draw three horizontal bars (hamburger menu)
+                int cx = getWidth() / 2, cy = getHeight() / 2;
+                g2.setColor(ChatTheme.TEXT_SECONDARY);
+                g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.drawLine(cx - 7, cy - 5, cx + 7, cy - 5);
+                g2.drawLine(cx - 7, cy,     cx + 7, cy    );
+                g2.drawLine(cx - 7, cy + 5, cx + 7, cy + 5);
+                g2.dispose();
+            }
+        };
+        toggleBtn.setOpaque(false);
+        toggleBtn.setContentAreaFilled(false);
+        toggleBtn.setBorderPainted(false);
+        toggleBtn.setFocusPainted(false);
+        toggleBtn.setPreferredSize(new Dimension(38, 32));
+        toggleBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        toggleBtn.setToolTipText("Toggle users list");
+        toggleBtn.addActionListener(e -> chatPanel.toggleSidebar());
+
+        // Left section: toggle + room name
+        JPanel left = new JPanel(new BorderLayout(6, 0));
+        left.setOpaque(false);
+
+        JLabel room = new JLabel("Global Chat");
         room.setFont(ChatTheme.FONT_HEADER);
         room.setForeground(ChatTheme.TEXT_PRIMARY);
+
+        left.add(toggleBtn, BorderLayout.WEST);
+        left.add(room,      BorderLayout.CENTER);
 
         // Connected-as badge
         JLabel user = new JLabel("@" + username + "  ");
         user.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         user.setForeground(ChatTheme.TEXT_SECONDARY);
 
-        header.add(room, BorderLayout.WEST);
+        header.add(left, BorderLayout.WEST);
         header.add(user, BorderLayout.EAST);
         header.setPreferredSize(new Dimension(0, 48));
         return header;
@@ -254,10 +317,31 @@ public class MainFrame extends JFrame implements MessageListener {
         bar.setOpaque(false);
         bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 8, 8));
 
-        JLabel lbl = new JLabel("✦");
-        lbl.setFont(new Font("Segoe UI", Font.BOLD, 16));
-        lbl.setForeground(ChatTheme.ACCENT);
-        lbl.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 6));
+        // AI sparkle icon — four-pointed star drawn with Graphics2D (no font dependency)
+        JPanel lbl = new JPanel() {
+            @Override public Dimension getPreferredSize() { return new Dimension(28, 38); }
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int cx = getWidth() / 2, cy = getHeight() / 2;
+                // Four-pointed star (diamond cross) for AI sparkle
+                g2.setColor(ChatTheme.ACCENT);
+                GeneralPath star = new GeneralPath();
+                star.moveTo(cx,      cy - 8); // top
+                star.lineTo(cx + 2,  cy - 2);
+                star.lineTo(cx + 8,  cy    ); // right
+                star.lineTo(cx + 2,  cy + 2);
+                star.lineTo(cx,      cy + 8); // bottom
+                star.lineTo(cx - 2,  cy + 2);
+                star.lineTo(cx - 8,  cy    ); // left
+                star.lineTo(cx - 2,  cy - 2);
+                star.closePath();
+                g2.fill(star);
+                g2.dispose();
+            }
+        };
+        lbl.setOpaque(false);
+        lbl.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 2));
 
         JTextField promptField = new JTextField() {
             @Override protected void paintComponent(Graphics g) {
@@ -291,21 +375,23 @@ public class MainFrame extends JFrame implements MessageListener {
             }
         });
 
-        JButton askBtn = new JButton("Ask") {
+        // Ask button — teal circle with white right-pointing triangle, no text/font
+        JButton askBtn = new JButton() {
             @Override protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(isEnabled() ? ChatTheme.ACCENT : new Color(0x2A3942));
-                g2.fill(new Ellipse2D.Float(0, 0, getWidth(), getHeight()));
+                g2.fill(new Ellipse2D.Float(1, 1, getWidth() - 2, getHeight() - 2));
+                // White send triangle
+                int cx = getWidth() / 2, cy = getHeight() / 2;
                 g2.setColor(Color.WHITE);
-                g2.setFont(new Font("Segoe UI", Font.BOLD, 11));
-                java.awt.FontMetrics fm = g2.getFontMetrics();
-                String label = getText();
-                g2.drawString(label,
-                        (getWidth()  - fm.stringWidth(label)) / 2,
-                        (getHeight() + fm.getAscent() - fm.getDescent()) / 2);
+                GeneralPath arrow = new GeneralPath();
+                arrow.moveTo(cx - 4, cy - 5);
+                arrow.lineTo(cx + 6, cy);
+                arrow.lineTo(cx - 4, cy + 5);
+                arrow.closePath();
+                g2.fill(arrow);
                 g2.dispose();
-                // Do NOT call super.paintComponent — avoids double-painting the text
             }
         };
         askBtn.setOpaque(false);
@@ -353,10 +439,4 @@ public class MainFrame extends JFrame implements MessageListener {
         }
     }
 
-    private static String humanSize(Long bytes) {
-        if (bytes == null) return "?";
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return (bytes / 1024) + " KB";
-        return String.format("%.1f MB", bytes / (1024.0 * 1024));
-    }
 }

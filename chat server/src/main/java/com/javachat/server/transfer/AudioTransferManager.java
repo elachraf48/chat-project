@@ -48,6 +48,10 @@ public class AudioTransferManager {
         if (fileId == null || fileId.isBlank()) {
             return "AUDIO_META: fileId must not be empty.";
         }
+        // Validate fileId is a well-formed UUID to prevent log injection / misuse
+        try { java.util.UUID.fromString(fileId); }
+        catch (IllegalArgumentException e) { return "AUDIO_META: fileId must be a valid UUID."; }
+
         if (fileName == null || fileName.isBlank()) {
             return "AUDIO_META: fileName must not be empty.";
         }
@@ -64,7 +68,9 @@ public class AudioTransferManager {
             return "AUDIO_META: totalChunks must be > 0.";
         }
 
-        Logger.info("[AUDIO_META] " + senderUsername + " → \"" + fileName
+        // Sanitize fileName before logging to prevent log injection
+        String safeFileName = fileName.replace("\n", "\\n").replace("\r", "\\r");
+        Logger.info("[AUDIO_META] " + senderUsername + " → \"" + safeFileName
                 + "\" (" + fileSize + " bytes, " + totalChunks + " chunks) [" + fileId + "]");
 
         clientManager.broadcastExcept(senderUsername,
@@ -85,6 +91,8 @@ public class AudioTransferManager {
         if (fileId == null || fileId.isBlank()) {
             return "AUDIO_CHUNK: fileId must not be empty.";
         }
+        try { java.util.UUID.fromString(fileId); }
+        catch (IllegalArgumentException e) { return "AUDIO_CHUNK: fileId must be a valid UUID."; }
         if (chunkIdx == null || chunkIdx < 0) {
             return "AUDIO_CHUNK: chunkIndex must be >= 0.";
         }
@@ -107,6 +115,8 @@ public class AudioTransferManager {
         if (fileId == null || fileId.isBlank()) {
             return "AUDIO_COMPLETE: fileId must not be empty.";
         }
+        try { java.util.UUID.fromString(fileId); }
+        catch (IllegalArgumentException e) { return "AUDIO_COMPLETE: fileId must be a valid UUID."; }
         Logger.info("[AUDIO_COMPLETE] " + senderUsername + " finished audio transfer [" + fileId + "]");
         clientManager.broadcastExcept(senderUsername,
                 Message.audioComplete(senderUsername, fileId));
@@ -118,6 +128,9 @@ public class AudioTransferManager {
     // -------------------------------------------------------------------------
 
     private boolean hasAllowedExtension(String fileName) {
+        // endsWith() checks only the final extension segment (e.g. ".m4a" in "audio.exe.m4a").
+        // A double-extension file still passes — server never stores or executes files,
+        // so the risk is low, but clients should be aware when auto-playing received audio.
         String lower = fileName.toLowerCase();
         for (String ext : ALLOWED_EXTENSIONS) {
             if (lower.endsWith(ext)) return true;

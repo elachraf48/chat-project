@@ -1,16 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#1565C0</color>
-    <color name="colorPrimaryDark">#0D47A1</color>
-    <color name="colorAccent">#1E88E5</color>
+    <!-- Brand -->
+    <color name="colorPrimary">#075E54</color>
+    <color name="colorPrimaryDark">#054D44</color>
+    <color name="colorAccent">#25D366</color>
+
+    <!-- Basics -->
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
-    <color name="message_background_self">#BBDEFB</color>
-    <color name="message_background_other">#F5F5F5</color>
-    <color name="message_text_self">#0D47A1</color>
-    <color name="message_text_other">#212121</color>
-    <color name="online_user_dot">#4CAF50</color>
-    <color name="timestamp_color">#9E9E9E</color>
-    <color name="input_background">#FFFFFF</color>
-    <color name="divider_color">#E0E0E0</color>
+    <color name="background_chat">#ECE5DD</color>
+
+    <!-- Chat bubbles -->
+    <color name="bubble_self">#DCF8C6</color>
+    <color name="bubble_other">#FFFFFF</color>
+    <color name="message_text_self">#111111</color>
+    <color name="message_text_other">#111111</color>
+    <color name="sender_name_color">#128C7E</color>
+    <color name="timestamp_color">#8E8E8E</color>
+    <!-- message_background_self and message_background_other alias bubble_self/bubble_other -->
+    <color name="message_background_self">@color/bubble_self</color>
+    <color name="message_background_other">@color/bubble_other</color>
+
+    <!-- System message pill -->
+    <color name="system_msg_bg">#D4EED4</color>
+    <color name="system_msg_text">#3C763D</color>
+
+    <!-- Online indicator -->
+    <color name="online_user_dot">#25D366</color>
+
+    <!-- Input bar -->
+    <color name="input_background">#F6F6F6</color>
+    <color name="divider_color">#D0D0D0</color>
+
+    <!-- Download button inside file bubble -->
+    <color name="download_btn_bg">#128C7E</color>
+    <color name="download_btn_text">#FFFFFF</color>
+
+    <!-- Login screen -->
+    <color name="login_bg">#075E54</color>
+    <color name="login_card_bg">#FFFFFF</color>
+    <color name="login_btn_bg">#25D366</color>
+    <color name="login_btn_text">#FFFFFF</color>
+    <color name="login_error">#D32F2F</color>
 </resources>

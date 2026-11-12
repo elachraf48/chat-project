@@ -112,6 +112,7 @@ public class Message {
         m.fileId = fileId;
         m.chunkIndex = chunkIndex;
         m.data = base64Data;
+        m.timestamp = now();
         return m;
     }
 
@@ -147,6 +148,7 @@ public class Message {
         m.fileId = fileId;
         m.chunkIndex = chunkIndex;
         m.data = base64Data;
+        m.timestamp = now();
         return m;
     }
 
