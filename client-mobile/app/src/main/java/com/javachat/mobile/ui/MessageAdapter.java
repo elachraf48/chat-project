@@ -1,12 +1,15 @@
 package com.javachat.mobile.ui;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.text.format.Formatter;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -34,6 +37,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
     private static final int VIEW_TYPE_SYSTEM = 2;
     private static final int VIEW_TYPE_AUDIO  = 3;
     private static final int VIEW_TYPE_FILE   = 4;
+    private static final int VIEW_TYPE_IMAGE  = 5;
 
     public interface DownloadClickListener {
         void onDownload(Message message);
@@ -56,6 +60,7 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         MessageType type = m.getType();
 
         if (type == MessageType.AUDIO_COMPLETE) return VIEW_TYPE_AUDIO;
+        if (type == MessageType.FILE_COMPLETE && isImageFile(m.getFileName())) return VIEW_TYPE_IMAGE;
         if (type == MessageType.FILE_COMPLETE)  return VIEW_TYPE_FILE;
 
         if (type == MessageType.USER_JOINED
@@ -73,9 +78,10 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
     public MessageViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         int layout;
         switch (viewType) {
-            case VIEW_TYPE_AUDIO:  layout = R.layout.item_audio_message; break;
-            case VIEW_TYPE_FILE:   layout = R.layout.item_file_message;  break;
-            default:               layout = R.layout.item_message;       break;
+            case VIEW_TYPE_AUDIO:  layout = R.layout.item_audio_message;  break;
+            case VIEW_TYPE_FILE:   layout = R.layout.item_file_message;   break;
+            case VIEW_TYPE_IMAGE:  layout = R.layout.item_image_message;  break;
+            default:               layout = R.layout.item_message;        break;
         }
         View view = LayoutInflater.from(parent.getContext()).inflate(layout, parent, false);
         return new MessageViewHolder(view, viewType);
@@ -87,6 +93,68 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         int viewType = getItemViewType(position);
 
         switch (viewType) {
+
+            case VIEW_TYPE_IMAGE: {
+                boolean isSelf = myUsername != null && myUsername.equals(m.getSender());
+                byte[] imgBytes = com.javachat.mobile.transfer.FileTransferManager
+                        .getInstance().getReceivedFileBytes(m.getFileId());
+                Bitmap bmp = (imgBytes != null)
+                        ? BitmapFactory.decodeByteArray(imgBytes, 0, imgBytes.length) : null;
+
+                if (isSelf) {
+                    show(holder.layoutImageSelf);
+                    hide(holder.tvImageSenderName);
+                    hide(holder.layoutImageOther);
+                    if (holder.ivImageSelf != null && bmp != null)
+                        holder.ivImageSelf.setImageBitmap(bmp);
+                    if (holder.tvImageTimeSelf != null)
+                        holder.tvImageTimeSelf.setText(formatTime(m.getTimestamp()));
+                    // Sender can also save their own sent image to Downloads
+                    if (holder.btnSaveImageSelf != null) {
+                        boolean saved = "saved".equals(m.getTag());
+                        if (saved) {
+                            holder.btnSaveImageSelf.setText(
+                                    holder.itemView.getContext().getString(R.string.file_saved_to_downloads));
+                            holder.btnSaveImageSelf.setEnabled(false);
+                            holder.btnSaveImageSelf.setOnClickListener(null);
+                        } else {
+                            holder.btnSaveImageSelf.setText(
+                                    holder.itemView.getContext().getString(R.string.btn_save_image));
+                            holder.btnSaveImageSelf.setEnabled(true);
+                            holder.btnSaveImageSelf.setOnClickListener(v -> {
+                                if (downloadListener != null) downloadListener.onDownload(m);
+                            });
+                        }
+                    }
+                } else {
+                    hide(holder.layoutImageSelf);
+                    show(holder.tvImageSenderName);
+                    show(holder.layoutImageOther);
+                    if (holder.tvImageSenderName != null)
+                        holder.tvImageSenderName.setText(m.getSender() != null ? m.getSender() : "");
+                    if (holder.ivImageOther != null && bmp != null)
+                        holder.ivImageOther.setImageBitmap(bmp);
+                    if (holder.tvImageTimeOther != null)
+                        holder.tvImageTimeOther.setText(formatTime(m.getTimestamp()));
+                    if (holder.btnSaveImage != null) {
+                        boolean saved = "saved".equals(m.getTag());
+                        if (saved) {
+                            holder.btnSaveImage.setText(
+                                    holder.itemView.getContext().getString(R.string.file_saved_to_downloads));
+                            holder.btnSaveImage.setEnabled(false);
+                            holder.btnSaveImage.setOnClickListener(null);
+                        } else {
+                            holder.btnSaveImage.setText(
+                                    holder.itemView.getContext().getString(R.string.btn_save_image));
+                            holder.btnSaveImage.setEnabled(true);
+                            holder.btnSaveImage.setOnClickListener(v -> {
+                                if (downloadListener != null) downloadListener.onDownload(m);
+                            });
+                        }
+                    }
+                }
+                break;
+            }
 
             case VIEW_TYPE_AUDIO: {
                 boolean isSelf = myUsername != null && myUsername.equals(m.getSender());
@@ -197,6 +265,15 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         return messages.size();
     }
 
+    /** Returns true if the filename has an image extension we can preview inline. */
+    private static boolean isImageFile(String fileName) {
+        if (fileName == null) return false;
+        String lower = fileName.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+                || lower.endsWith(".png") || lower.endsWith(".gif")
+                || lower.endsWith(".webp");
+    }
+
     private String formatTime(String iso) {
         if (iso == null || iso.length() < 16) return "";
         return iso.substring(11, 16);
@@ -225,6 +302,12 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
         TextView tvFileNameOther, tvFileSizeOther, tvFileTimeOther;
         Button   btnDownloadFile;
 
+        // Image views (item_image_message.xml)
+        View      layoutImageSelf, layoutImageOther;
+        TextView  tvImageSenderName, tvImageTimeSelf, tvImageTimeOther;
+        ImageView ivImageSelf, ivImageOther;
+        Button    btnSaveImageSelf, btnSaveImage;
+
         MessageViewHolder(@NonNull View itemView, int viewType) {
             super(itemView);
             switch (viewType) {
@@ -246,6 +329,17 @@ public class MessageAdapter extends RecyclerView.Adapter<MessageAdapter.MessageV
                     tvFileSizeOther   = itemView.findViewById(R.id.tvFileSizeOther);
                     tvFileTimeOther   = itemView.findViewById(R.id.tvFileTimeOther);
                     btnDownloadFile   = itemView.findViewById(R.id.btnDownloadFile);
+                    break;
+                case 5: // IMAGE
+                    layoutImageSelf    = itemView.findViewById(R.id.layoutImageSelf);
+                    layoutImageOther   = itemView.findViewById(R.id.layoutImageOther);
+                    tvImageSenderName  = itemView.findViewById(R.id.tvImageSenderName);
+                    tvImageTimeSelf    = itemView.findViewById(R.id.tvImageTimeSelf);
+                    tvImageTimeOther   = itemView.findViewById(R.id.tvImageTimeOther);
+                    ivImageSelf        = itemView.findViewById(R.id.ivImageSelf);
+                    ivImageOther       = itemView.findViewById(R.id.ivImageOther);
+                    btnSaveImageSelf   = itemView.findViewById(R.id.btnSaveImageSelf);
+                    btnSaveImage       = itemView.findViewById(R.id.btnSaveImage);
                     break;
                 default: // TEXT or SYSTEM
                     layoutSelf   = itemView.findViewById(R.id.layoutSelf);

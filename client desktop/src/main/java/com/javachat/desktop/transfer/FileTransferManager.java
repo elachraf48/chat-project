@@ -39,13 +39,22 @@ public class FileTransferManager {
     }
 
     /**
-     * Open a file chooser, validate, then send on a background thread.
-     *
-     * @param onSelected  called on the EDT right after the user picks a valid file,
-     *                    with (fileName, fileSize) so the caller can show a sent bubble
-     *                    immediately. May be null.
+     * Functional interface for the file-selected callback.
+     * fileId  — UUID assigned to this transfer
+     * fileName — display name of the file
+     * fileData — raw bytes of the file (may be null if reading fails)
      */
-    public void selectAndSendFile(java.util.function.BiConsumer<String, Long> onSelected) {
+    @FunctionalInterface
+    public interface SendSelectedCallback {
+        void onSelected(String fileId, String fileName, byte[] fileData);
+    }
+
+    /**
+     * Open a file chooser, validate, then send on a background thread.
+     * The callback is called on the EDT once the file is read, before network send,
+     * so the caller can cache the bytes for sender-side preview/save.
+     */
+    public void selectAndSendFile(SendSelectedCallback onSelected) {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Select file to send");
         if (chooser.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) return;
@@ -60,25 +69,39 @@ public class FileTransferManager {
             return;
         }
 
-        if (onSelected != null) {
-            javax.swing.SwingUtilities.invokeLater(
-                    () -> onSelected.accept(file.getName(), file.length()));
-        }
+        String fileId = java.util.UUID.randomUUID().toString();
 
-        Thread sender = new Thread(() -> doSend(file), "file-sender");
+        // Read bytes on background thread to avoid blocking EDT on large files
+        Thread sender = new Thread(() -> {
+            byte[] fileData = null;
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+                byte[] tmp = new byte[8192];
+                int n;
+                while ((n = fis.read(tmp)) != -1) buf.write(tmp, 0, n);
+                fileData = buf.toByteArray();
+            } catch (IOException ignored) {}
+
+            // Notify caller with bytes before network send (EDT)
+            if (onSelected != null) {
+                final byte[] data = fileData;
+                javax.swing.SwingUtilities.invokeLater(
+                        () -> onSelected.onSelected(fileId, file.getName(), data));
+            }
+            doSend(file, fileId);
+        }, "file-sender");
         sender.setDaemon(true);
         sender.start();
     }
 
-    /** Backwards-compat overload — no bubble callback. */
+    /** Backwards-compat overload — no callback. */
     public void selectAndSendFile() {
         selectAndSendFile(null);
     }
 
     // -------------------------------------------------------------------------
 
-    private void doSend(File file) {
-        String fileId      = UUID.randomUUID().toString();
+    private void doSend(File file, String fileId) {
         String fileName    = file.getName();
         long   fileSize    = file.length();
         int    totalChunks = (int) Math.ceil((double) fileSize / CHUNK_SIZE);

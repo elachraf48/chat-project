@@ -29,6 +29,10 @@ public class Message {
     private Integer chunkIndex;
     private String  data;         // base64 chunk payload — server requires "data" not "text"
 
+    // Presence list — sent once on join
+    /** USER_LIST payload — list of all connected usernames sent to a newcomer. */
+    private java.util.List<String> usernames;
+
     // AI — name matches server exactly
     private String prompt;        // server requires "prompt" not "text"
 
@@ -161,6 +165,9 @@ public class Message {
 
     public String getData()                         { return data; }
     public void setData(String data)                { this.data = data; }
+
+    public java.util.List<String> getUsernames()                          { return usernames; }
+    public void setUsernames(java.util.List<String> usernames)            { this.usernames = usernames; }
 
     public String getPrompt()                       { return prompt; }
     public void setPrompt(String prompt)            { this.prompt = prompt; }

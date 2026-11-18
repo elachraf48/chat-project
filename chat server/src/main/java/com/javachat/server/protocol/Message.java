@@ -13,6 +13,8 @@ public class Message {
     private String sender;
     private String text;
     private String timestamp;
+    /** USER_LIST payload — full list of currently connected usernames sent to a newcomer. */
+    private java.util.List<String> usernames;
 
     // --- File / Audio transfer fields ---
     /** Unique ID shared across FILE_META, FILE_CHUNK, FILE_COMPLETE for the same transfer. */
@@ -59,6 +61,15 @@ public class Message {
         Message m = new Message();
         m.type = MessageType.USER_JOINED;
         m.sender = username;
+        m.timestamp = now();
+        return m;
+    }
+
+    /** Sent once to a newcomer — contains all already-connected usernames. */
+    public static Message userList(java.util.Collection<String> names) {
+        Message m = new Message();
+        m.type = MessageType.USER_LIST;
+        m.usernames = new java.util.ArrayList<>(names);
         m.timestamp = now();
         return m;
     }
@@ -185,6 +196,9 @@ public class Message {
 
     public String getSender() { return sender; }
     public void setSender(String sender) { this.sender = sender; }
+
+    public java.util.List<String> getUsernames() { return usernames; }
+    public void setUsernames(java.util.List<String> usernames) { this.usernames = usernames; }
 
     public String getText() { return text; }
     public void setText(String text) { this.text = text; }

@@ -42,7 +42,7 @@ public class LoginFrame extends JFrame implements MessageListener {
     private final ConnectionManager connectionManager = new ConnectionManager();
 
     public LoginFrame() {
-        super("JavaChat");
+        super("AchrafChat");
         usernameField = createStyledTextField("Enter your name…");
         joinButton    = createJoinButton();
         statusLabel   = new JLabel(" ");
@@ -104,7 +104,7 @@ public class LoginFrame extends JFrame implements MessageListener {
         gbc.gridx = 0; gbc.weightx = 1;
 
         // Logo / title
-        JLabel logo = new JLabel("JavaChat", JLabel.CENTER);
+        JLabel logo = new JLabel("AchrafChat", JLabel.CENTER);
         logo.setFont(ChatTheme.FONT_TITLE);
         logo.setForeground(ChatTheme.ACCENT);
         gbc.gridy = 0; card.add(logo, gbc);

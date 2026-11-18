@@ -22,13 +22,19 @@ public class AudioPlayer {
             mediaPlayer.setOnCompletionListener(mp -> {
                     release();
                     if (listener != null) {
-                        // MediaPlayer completion fires on an internal thread — post to main thread
-                        new android.os.Handler(android.os.Looper.getMainLooper()).post(listener::onComplete);
+                        new android.os.Handler(android.os.Looper.getMainLooper())
+                                .post(listener::onComplete);
                     }
                 });
-            mediaPlayer.prepare();
+            mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+                    android.util.Log.e("AudioPlayer", "MediaPlayer error what=" + what + " extra=" + extra);
+                    release();
+                    return true; // handled — prevents IllegalStateException propagation
+                });
+            mediaPlayer.prepare(); // synchronous; safe for local files / cache URIs
             mediaPlayer.start();
-        } catch (IOException e) {
+        } catch (IOException | IllegalStateException e) {
+            android.util.Log.e("AudioPlayer", "play() failed: " + e.getMessage(), e);
             release();
         }
     }

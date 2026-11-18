@@ -153,6 +153,8 @@ public class ClientHandler implements Runnable {
                 case AUDIO_COMPLETE -> handleAudioComplete(message);
                 case AI_REQUEST    -> handleAiRequest(message);
                 case JOIN          -> sendMessage(Message.error("Already joined as " + username + "."));
+                // DEV: client sends ERROR type to report crashes/ANR/exceptions server-side
+                case ERROR         -> handleClientError(message);
                 default            -> Logger.info("[IGNORED] " + message.getType() + " from " + username);
             }
         }
@@ -184,12 +186,16 @@ public class ClientHandler implements Runnable {
             username = requestedName;
             Logger.info("[JOIN] " + username + " from " + socket.getRemoteSocketAddress());
             sendMessage(Message.joinSuccess(username));
-            // Send USER_JOINED for every already-connected user to the newcomer,
-            // so their online users sidebar populates with existing members.
-            for (String existingUser : clientManager.getUsernames()) {
-                if (!existingUser.equals(username)) {
-                    sendMessage(Message.userJoined(existingUser));
-                }
+            // Send a single USER_LIST with all already-connected users to the newcomer.
+            // Using one message avoids the race where individual USER_JOINED messages
+            // arrive before the client listener is registered (they would be dropped).
+            java.util.Set<String> existing = clientManager.getUsernames();
+            java.util.List<String> others = new java.util.ArrayList<>();
+            for (String u : existing) {
+                if (!u.equals(username)) others.add(u);
+            }
+            if (!others.isEmpty()) {
+                sendMessage(Message.userList(others));
             }
             clientManager.broadcastExcept(username, Message.userJoined(username));
         } else {
@@ -287,5 +293,20 @@ public class ClientHandler implements Runnable {
 
     private String displayName() {
         return username != null ? username : socket.getRemoteSocketAddress().toString();
+    }
+
+    // =========================================================================
+    // DEV — Client error reporting
+    // =========================================================================
+
+    /**
+     * The Android client sends ERROR messages containing crash/ANR stacktraces
+     * during development so the full error is visible in the server log without
+     * needing adb or a physical screen.
+     */
+    private void handleClientError(Message message) {
+        String report = message.getText();
+        if (report == null || report.isBlank()) return;
+        Logger.error("[CLIENT_ERROR] from " + displayName() + ":\n" + report);
     }
 }

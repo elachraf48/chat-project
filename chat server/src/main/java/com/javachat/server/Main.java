@@ -18,7 +18,7 @@ public class Main {
         ServerConfig config = new ServerConfig();
 
         Logger.info("==========================================");
-        Logger.info("         JavaChat Server Starting         ");
+        Logger.info("        AchrafChat Server Starting        ");
         Logger.info("==========================================");
         Logger.info("Port: " + config.getPort());
         printNetworkAddresses(config.getPort());
@@ -27,9 +27,9 @@ public class Main {
         ChatServer chatServer = new ChatServer(config, clientManager);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            Logger.info("[JavaChat Server] Shutting down...");
+            Logger.info("[AchrafChat Server] Shutting down...");
             chatServer.stop();
-            Logger.info("[JavaChat Server] Shutdown complete.");
+            Logger.info("[AchrafChat Server] Shutdown complete.");
         }));
 
         Logger.info("Server ready — waiting for clients...");

@@ -13,6 +13,8 @@ public enum MessageType {
     // Presence
     USER_JOINED,
     USER_LEFT,
+    /** Sent once to a newcomer with the full list of already-connected users. */
+    USER_LIST,
 
     // General error
     ERROR,

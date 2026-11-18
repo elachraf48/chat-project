@@ -23,6 +23,8 @@ public class GlobalChatPanel extends JPanel {
     private ConnectionManager   connectionManager;
     private FileTransferManager fileTransferManager;
     private AudioManager        audioManager;
+    private java.util.Map<String, byte[]>  sentFileData;
+    private java.util.Map<String, String>  sentFileNames;
 
     private boolean sidebarVisible = true;
 
@@ -49,21 +51,31 @@ public class GlobalChatPanel extends JPanel {
     public void init(String username,
                      ConnectionManager connectionManager,
                      FileTransferManager fileTransferManager,
-                     AudioManager audioManager) {
+                     AudioManager audioManager,
+                     java.util.Map<String, byte[]> sentFileData,
+                     java.util.Map<String, String> sentFileNames) {
         this.localUsername       = username;
         this.connectionManager   = connectionManager;
         this.fileTransferManager = fileTransferManager;
         this.audioManager        = audioManager;
+        this.sentFileData        = sentFileData;
+        this.sentFileNames       = sentFileNames;
 
         messagePanel.setLocalUsername(username);
 
         inputPanel.setSendListener(e -> sendChat());
 
-        // File button: open picker, then immediately show a sent-file bubble
+        // File button: read bytes into sentFileData at send time so the sender can
+        // preview and save their own sent image (MainFrame handles FILE_COMPLETE display).
         inputPanel.setFileListener(e ->
-            fileTransferManager.selectAndSendFile((fileName, fileSize) ->
-                messagePanel.appendFileBubble(null, fileName, fileSize, null)
-            )
+            fileTransferManager.selectAndSendFile((fileId, fileName, fileData) -> {
+                if (fileId != null && fileData != null) {
+                    sentFileData.put(fileId, fileData);
+                    sentFileNames.put(fileId, fileName);
+                }
+                // No bubble here — MainFrame.handleMessage(FILE_COMPLETE) shows it
+                // with the correct image/file type routing.
+            })
         );
 
         // Mic button: toggle recording; when recording stops and send completes show audio bubble
@@ -93,6 +105,12 @@ public class GlobalChatPanel extends JPanel {
     public void appendFileBubble(String sender, String fileName, long fileSize,
                                  java.util.function.Consumer<Void> onDownload) {
         messagePanel.appendFileBubble(sender, fileName, fileSize, onDownload);
+    }
+
+    public void appendImageBubble(String sender, String fileName,
+                                   byte[] imageBytes,
+                                   java.util.function.Consumer<Void> onSave) {
+        messagePanel.appendImageBubble(sender, fileName, imageBytes, onSave);
     }
 
     public void appendAudioBubble(String sender, java.util.function.Consumer<Void> onPlay) {

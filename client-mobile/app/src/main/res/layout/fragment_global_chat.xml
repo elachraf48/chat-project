@@ -17,26 +17,20 @@
         android:clipToPadding="false"
         android:scrollbars="vertical"/>
 
-    <!-- Thin divider above input bar -->
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/divider_color"/>
-
-    <!-- ── Input bar ──────────────────────────────────────────────────────── -->
+    <!-- ── Input bar — WhatsApp style ──────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:background="@color/input_background"
-        android:paddingStart="6dp"
-        android:paddingEnd="6dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="8dp"
         android:paddingTop="6dp"
         android:paddingBottom="6dp"
         android:gravity="center_vertical"
         android:elevation="4dp">
 
-        <!-- Attach (file) -->
+        <!-- Attach (file) — left of input -->
         <ImageButton
             android:id="@+id/btnAttach"
             android:layout_width="40dp"
@@ -45,6 +39,18 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="@color/colorPrimary"
             android:contentDescription="@string/btn_attach"/>
+
+        <!-- Emoji picker — left of input -->
+        <Button
+            android:id="@+id/btnEmoji"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="😊"
+            android:textSize="22sp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/btn_emoji"
+            android:padding="0dp"
+            android:includeFontPadding="false"/>
 
         <!-- Text input with rounded background -->
         <EditText
@@ -58,13 +64,13 @@
             android:background="@drawable/bg_input_field"
             android:paddingStart="14dp"
             android:paddingEnd="14dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             android:textSize="15sp"
             android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"/>
+            android:layout_marginEnd="6dp"/>
 
-        <!-- Record audio -->
+        <!-- Record audio — right of input -->
         <ImageButton
             android:id="@+id/btnRecord"
             android:layout_width="40dp"
@@ -72,9 +78,10 @@
             android:src="@android:drawable/ic_btn_speak_now"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="@color/colorPrimary"
-            android:contentDescription="@string/btn_record"/>
+            android:contentDescription="@string/btn_record"
+            android:layout_marginEnd="2dp"/>
 
-        <!-- Gemini AI -->
+        <!-- Gemini AI — right of input -->
         <ImageButton
             android:id="@+id/btnAi"
             android:layout_width="40dp"
@@ -82,21 +89,19 @@
             android:src="@android:drawable/ic_menu_help"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:tint="@color/colorPrimary"
-            android:contentDescription="@string/btn_ai"/>
+            android:contentDescription="@string/btn_ai"
+            android:layout_marginEnd="4dp"/>
 
-        <!-- Send button — teal rounded pill -->
-        <Button
+        <!-- Send — green circle with arrow icon, like WhatsApp -->
+        <ImageButton
             android:id="@+id/btnSend"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:text="@string/btn_send"
-            android:backgroundTint="@color/colorAccent"
-            android:textColor="@color/white"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:stateListAnimator="@null"/>
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:src="@android:drawable/ic_menu_send"
+            android:background="@drawable/bg_send_btn"
+            android:tint="@color/white"
+            android:contentDescription="@string/btn_send"
+            android:padding="11dp"/>
 
     </LinearLayout>
 

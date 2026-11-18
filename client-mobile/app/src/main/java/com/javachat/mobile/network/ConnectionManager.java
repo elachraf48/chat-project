@@ -29,6 +29,10 @@ public class ConnectionManager {
 
     private final SocketClient socketClient = new SocketClient();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    // sendExecutor is single-threaded so all outgoing messages are sent in submission order.
+    // A CachedThreadPool would allow AUDIO_COMPLETE to overtake AUDIO_META on separate threads.
+    private final ExecutorService sendExecutor = Executors.newSingleThreadExecutor();
+    // connectExecutor is separate so connect/reader-loop tasks don't block behind queued sends.
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     /** BUG 7: guard against concurrent connect calls. */
@@ -36,6 +40,15 @@ public class ConnectionManager {
 
     private MessageListener listener;
     private NotificationHelper notificationHelper;
+
+    /**
+     * Pending USER_LIST message — saved when it arrives while LoginActivity is
+     * the listener (LoginActivity ignores it). Replayed immediately when the next
+     * setListener() call registers a new listener (ChatActivity), so the online
+     * users list is always populated regardless of Activity transition timing.
+     * Cleared once replayed or on disconnect.
+     */
+    private volatile Message pendingUserList;
 
     private ConnectionManager() {}
 
@@ -46,6 +59,21 @@ public class ConnectionManager {
 
     public void setListener(MessageListener listener) {
         this.listener = listener;
+        // Replay a pending USER_LIST that arrived during the LoginActivity→ChatActivity
+        // transition gap and was ignored by LoginActivity.
+        if (listener != null && pendingUserList != null) {
+            final Message pending = pendingUserList;
+            pendingUserList = null;
+            mainHandler.post(() -> {
+                if (this.listener != null) {
+                    this.listener.onMessageReceived(pending);
+                }
+            });
+        }
+    }
+
+    public MessageListener getListener() {
+        return listener;
     }
 
     public void setNotificationContext(Context context) {
@@ -69,6 +97,10 @@ public class ConnectionManager {
                 socketClient.connect(host, port, ClientConfig.CONNECT_TIMEOUT_MS);
                 Log.d(TAG, "Connected — sending JOIN");
                 onSuccess.run();
+                // Fix A: reset flag now — "connecting" means the TCP handshake phase only.
+                // Without this, returning to LoginActivity and tapping Connect again is
+                // silently dropped by the compareAndSet guard, causing a stuck spinner.
+                connecting.set(false);
                 Log.d(TAG, "JOIN queued — starting reader loop");
                 startReaderLoop();
             } catch (IOException e) {
@@ -84,11 +116,34 @@ public class ConnectionManager {
     // -------------------------------------------------------------------------
 
     public void send(Message message) {
-        executor.submit(() -> {
+        sendExecutor.submit(() -> {
             try {
                 socketClient.send(message);
             } catch (IOException e) {
                 notifyConnectionLost(e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * DEV: fire-and-forget error report to the server.
+     * Sends an ERROR message containing the full text (crash trace, ANR info, etc.)
+     * so it appears in the server log as [CLIENT_ERROR]. Never throws or calls
+     * notifyConnectionLost — used inside crash/exception handlers where the
+     * connection may already be dying.
+     */
+    public void sendErrorReport(String errorText) {
+        if (errorText == null || errorText.isEmpty()) return;
+        executor.submit(() -> {
+            try {
+                if (socketClient.isConnected()) {
+                    Message report = new Message();
+                    report.setType(MessageType.ERROR);
+                    report.setText(errorText);
+                    socketClient.send(report);
+                }
+            } catch (Exception ignored) {
+                // Best-effort only — never propagate from an error reporter
             }
         });
     }
@@ -103,6 +158,7 @@ public class ConnectionManager {
 
     public void disconnect() {
         connecting.set(false);
+        pendingUserList = null;
         socketClient.disconnect();
     }
 
@@ -144,16 +200,36 @@ public class ConnectionManager {
         Log.d(TAG, "Dispatching " + msg.getType()
                 + " to " + (listener != null ? listener.getClass().getSimpleName() : "null"));
 
+        // USER_LIST: always cache it. If LoginActivity is the current listener it will
+        // ignore the message, but setListener() will replay this cached copy to
+        // ChatActivity the moment it registers — so the online list is never lost.
+        if (msg.getType() == MessageType.USER_LIST) {
+            pendingUserList = msg;
+        }
+
         if (msg.getType() == MessageType.CHAT && notificationHelper != null) {
             notificationHelper.showMessageNotification(msg.getSender(), msg.getText());
         }
         if (listener != null) {
-            mainHandler.post(() -> listener.onMessageReceived(msg));
+            final MessageListener l = listener;
+            mainHandler.post(() -> {
+                try {
+                    l.onMessageReceived(msg);
+                } catch (Exception e) {
+                    // DEV: a UI-thread crash inside the listener would otherwise
+                    // silently kill the Activity. Re-throw so the global handler
+                    // in JavaChatApplication shows the full stacktrace on screen.
+                    Log.e(TAG, "Listener threw on main thread for " + msg.getType(), e);
+                    throw new RuntimeException(
+                            "[DEV] UI crash handling message type " + msg.getType(), e);
+                }
+            });
         }
     }
 
     private void notifyConnectionLost(String reason) {
         connecting.set(false);
+        pendingUserList = null;   // stale on reconnect
         socketClient.disconnect();
         if (listener != null) {
             mainHandler.post(() -> listener.onConnectionLost(reason));

@@ -39,15 +39,17 @@ public class LoginActivity extends AppCompatActivity implements MessageListener 
 
     private String pendingUsername;
 
+    private static final String PREFS_NAME     = "achrafchat_login";
+    private static final String PREF_USERNAME  = "username";
+    private static final String PREF_SERVER_IP = "server_ip";
+    private static final String PREF_PORT      = "server_port";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
         // BUG 2: cleanly reset any existing connection.
-        // disconnect() acquires a synchronized lock on SocketClient. If the reader loop
-        // is blocked inside readLine(), the lock is held and calling disconnect() on the
-        // main thread blocks indefinitely → ANR. Run it on a background thread.
         AuthenticationManager.getInstance().logout();
         new Thread(ConnectionManager.getInstance()::disconnect).start();
 
@@ -58,10 +60,31 @@ public class LoginActivity extends AppCompatActivity implements MessageListener 
         progressBar  = findViewById(R.id.progressBar);
         tvError      = findViewById(R.id.tvError);
 
-        etServerIp.setText(ClientConfig.DEFAULT_SERVER_IP);
-        etServerPort.setText(String.valueOf(ClientConfig.DEFAULT_SERVER_PORT));
+        // Restore last-used credentials from SharedPreferences
+        android.content.SharedPreferences prefs =
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String savedUsername = prefs.getString(PREF_USERNAME, "");
+        String savedIp       = prefs.getString(PREF_SERVER_IP, ClientConfig.DEFAULT_SERVER_IP);
+        int    savedPort     = prefs.getInt(PREF_PORT, ClientConfig.DEFAULT_SERVER_PORT);
+
+        etUsername.setText(savedUsername);
+        etServerIp.setText(savedIp);
+        etServerPort.setText(String.valueOf(savedPort));
+
+        // Put cursor at end of username field so user can edit quickly
+        etUsername.setSelection(savedUsername.length());
 
         btnConnect.setOnClickListener(v -> onConnectClicked());
+    }
+
+    /** Persist current field values so they are restored next launch. */
+    private void saveCredentials(String username, String ip, int port) {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(PREF_USERNAME, username)
+                .putString(PREF_SERVER_IP, ip)
+                .putInt(PREF_PORT, port)
+                .apply();
     }
 
     // -------------------------------------------------------------------------
@@ -90,6 +113,9 @@ public class LoginActivity extends AppCompatActivity implements MessageListener 
         }
 
         int port = Integer.parseInt(portText.trim());
+        // Save credentials now — validation passed, connection is about to start
+        saveCredentials(username, host, port);
+
         pendingUsername = username;          // keep field for onMessageReceived
         final String joinUsername = username; // effectively-final local for lambda (thread-safe)
         showLoading(true);
@@ -129,6 +155,15 @@ public class LoginActivity extends AppCompatActivity implements MessageListener 
     // -------------------------------------------------------------------------
 
     private void openChat() {
+        // Do NOT null the listener here. USER_LIST (and other presence messages)
+        // arrive immediately after JOIN_SUCCESS on the reader thread and are posted
+        // to the main handler. If the listener is nulled before ChatActivity.onCreate()
+        // runs, those posts execute against null and are silently dropped — the new
+        // user never sees existing online users.
+        //
+        // LoginActivity.onMessageReceived only handles JOIN_SUCCESS / JOIN_ERROR,
+        // so any stray message delivered to this finishing Activity is harmless.
+        // ChatActivity.onCreate() overwrites the listener before fragment setup.
         startActivity(new Intent(this, ChatActivity.class));
         finish();
     }

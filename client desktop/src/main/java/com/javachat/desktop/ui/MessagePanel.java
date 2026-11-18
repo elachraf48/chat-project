@@ -5,6 +5,7 @@ import com.javachat.desktop.util.ChatTheme;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -19,6 +20,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.RenderingHints;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.RoundRectangle2D;
@@ -99,6 +101,21 @@ public class MessagePanel extends JPanel {
     /** Wrapping AI response bubble — teal-accented, centred, handles long text. */
     public void appendAiResponse(String text) {
         addBubble(new AiBubble(text), false);
+    }
+
+    /**
+     * Image preview bubble — shows a scaled thumbnail inline with sender name,
+     * timestamp, and a Save button. Only called for received image files.
+     *
+     * @param sender      sender username, or null for own messages
+     * @param fileName    original file name (shown below image)
+     * @param imageBytes  raw bytes of the image file
+     * @param onSave      callback invoked when the Save button is clicked
+     */
+    public void appendImageBubble(String sender, String fileName,
+                                   byte[] imageBytes, Consumer<Void> onSave) {
+        boolean isSelf = (sender == null);
+        addBubble(new ImageBubble(sender, fileName, imageBytes, onSave, isSelf), isSelf);
     }
 
     public void clear() {
@@ -545,6 +562,112 @@ public class MessagePanel extends JPanel {
             }
             if (r.isEmpty()) r.add("");
             return r;
+        }
+    }
+
+    // ── Image bubble ──────────────────────────────────────────────────────────
+
+    /**
+     * Inline image preview bubble.
+     * Shows a scaled thumbnail (max 280 × 200 px), the file name, a timestamp,
+     * and a Save button for received images.
+     */
+    private static final class ImageBubble extends JPanel {
+
+        private static final int MAX_IMG_W = 280;
+        private static final int MAX_IMG_H = 200;
+        private static final int RADIUS    = 14;
+        private static final int PAD       = 10;
+
+        ImageBubble(String sender, String fileName,
+                    byte[] imageBytes, Consumer<Void> onSave, boolean isSelf) {
+            setOpaque(false);
+            setLayout(new BorderLayout(0, 4));
+
+            // Scale the image to fit within MAX_IMG_W × MAX_IMG_H
+            Image scaled = null;
+            int imgW = MAX_IMG_W, imgH = MAX_IMG_H;
+            if (imageBytes != null && imageBytes.length > 0) {
+                BufferedImage raw = decodeImage(imageBytes);
+                if (raw != null) {
+                    double scaleW = (double) MAX_IMG_W / raw.getWidth();
+                    double scaleH = (double) MAX_IMG_H / raw.getHeight();
+                    double scale  = Math.min(1.0, Math.min(scaleW, scaleH));
+                    imgW = Math.max(1, (int) (raw.getWidth()  * scale));
+                    imgH = Math.max(1, (int) (raw.getHeight() * scale));
+                    scaled = raw.getScaledInstance(imgW, imgH, Image.SCALE_SMOOTH);
+                }
+            }
+
+            // Image label
+            JLabel imgLabel = new JLabel();
+            imgLabel.setPreferredSize(new Dimension(imgW, imgH));
+            imgLabel.setMinimumSize(new Dimension(imgW, imgH));
+            imgLabel.setMaximumSize(new Dimension(imgW, imgH));
+            if (scaled != null) {
+                imgLabel.setIcon(new ImageIcon(scaled));
+            } else {
+                imgLabel.setText("[image]");
+                imgLabel.setForeground(ChatTheme.TEXT_SECONDARY);
+                imgLabel.setHorizontalAlignment(JLabel.CENTER);
+            }
+
+            // Bottom bar: sender + filename + timestamp + Save button
+            JPanel bottom = new JPanel(new BorderLayout(6, 0));
+            bottom.setOpaque(false);
+
+            String nameText = (sender != null ? sender + "  " : "") +
+                              (fileName != null ? fileName : "image");
+            JLabel meta = new JLabel(nameText);
+            meta.setFont(ChatTheme.FONT_TIMESTAMP);
+            meta.setForeground(ChatTheme.TEXT_SECONDARY);
+            bottom.add(meta, BorderLayout.CENTER);
+
+            // Show Save button for both receiver and sender — sender also needs to save their image
+            if (onSave != null) {
+                JButton saveBtn = actionButton("Save");
+                saveBtn.addActionListener(e -> onSave.accept(null));
+                bottom.add(saveBtn, BorderLayout.EAST);
+            }
+
+            // Outer wrapper with bubble background
+            JPanel wrapper = new JPanel(new BorderLayout(0, 4)) {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                            RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(isSelf ? ChatTheme.BUBBLE_SENT : ChatTheme.BUBBLE_RECV);
+                    g2.fill(new RoundRectangle2D.Float(0, 0, getWidth(), getHeight(),
+                            RADIUS, RADIUS));
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            wrapper.setOpaque(false);
+            wrapper.setBorder(BorderFactory.createEmptyBorder(PAD, PAD, PAD, PAD));
+            wrapper.add(imgLabel, BorderLayout.CENTER);
+            wrapper.add(bottom,   BorderLayout.SOUTH);
+
+            int totalW = imgW + PAD * 2;
+            int totalH = imgH + 30 + PAD * 2;
+            wrapper.setPreferredSize(new Dimension(totalW, totalH));
+            wrapper.setMinimumSize(new Dimension(totalW, totalH));
+            wrapper.setMaximumSize(new Dimension(totalW, totalH));
+
+            add(wrapper, BorderLayout.CENTER);
+            setPreferredSize(new Dimension(totalW + 20, totalH + 4));
+            setMinimumSize(getPreferredSize());
+            setMaximumSize(getPreferredSize());
+        }
+
+        private static BufferedImage decodeImage(byte[] bytes) {
+            try {
+                return javax.imageio.ImageIO.read(
+                        new java.io.ByteArrayInputStream(bytes));
+            } catch (Exception e) {
+                return null;
+            }
         }
     }
 

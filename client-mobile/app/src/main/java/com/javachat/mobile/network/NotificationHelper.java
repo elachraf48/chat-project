@@ -51,7 +51,7 @@ public class NotificationHelper {
 
         Notification notification = new NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(sender != null ? sender : "JavaChat")
+                .setContentTitle(sender != null ? sender : "AchrafChat")
                 .setContentText(text != null ? text : "New message")
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setContentIntent(pi)

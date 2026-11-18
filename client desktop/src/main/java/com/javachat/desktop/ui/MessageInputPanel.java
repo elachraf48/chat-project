@@ -5,14 +5,18 @@ import com.javachat.desktop.util.ChatTheme;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JTextField;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.RenderingHints;
 import java.awt.event.ActionListener;
 import java.awt.event.FocusAdapter;
@@ -32,10 +36,24 @@ import java.awt.geom.RoundRectangle2D;
  */
 public class MessageInputPanel extends JPanel {
 
+    // Emoji list — stored as (display-text, insert-text) pairs.
+    // display-text uses ASCII/HTML fallbacks that render on every JVM/OS.
+    // insert-text is the real Unicode emoji that goes into the message field
+    // (the message field uses a wider font stack and handles it fine).
+    private static final String[][] EMOJIS = {
+        {":D",  "😀"}, {"xD",  "😂"}, {"<3",  "😍"}, {"B)",  "😎"}, {"^_^","🥰"},
+        {":'(", "😭"}, {">:(", "😡"}, {":-?", "🤔"}, {"+1",  "👍"}, {"-1",  "👎"},
+        {"<3",  "❤️"}, {"fire","🔥"}, {"!!!","🎉"},  {"100", "💯"}, {"/\\", "🙏"},
+        {":)",  "😊"}, {"XD",  "🤣"}, {"zzz","😴"},  {"O_O", "🤯"}, {":O",  "😱"},
+        {"O.O", "👀"}, {"flex","💪"}, {"(+)","🤝"},  {"ctrl","🎮"}, {"pi",  "🍕"},
+        {"cof", "☕"}, {"o/",  "🌍"}, {"^",  "🚀"},  {"!",   "💡"}, {"[x]", "✅"},
+    };
+
     private final JTextField inputField;
     private final JButton    sendButton;
     private final JButton    fileButton;
     private final JButton    audioButton;
+    private final JButton    emojiButton;
 
     private boolean recording = false;
 
@@ -48,15 +66,21 @@ public class MessageInputPanel extends JPanel {
         fileButton  = createFileButton();
         audioButton = createMicButton();
         sendButton  = createSendButton();
+        emojiButton = createEmojiButton();
 
         JPanel left = new JPanel(new BorderLayout(4, 0));
         left.setOpaque(false);
         left.add(fileButton,  BorderLayout.WEST);
         left.add(audioButton, BorderLayout.EAST);
 
+        JPanel right = new JPanel(new BorderLayout(4, 0));
+        right.setOpaque(false);
+        right.add(emojiButton, BorderLayout.WEST);
+        right.add(sendButton,  BorderLayout.EAST);
+
         add(left,        BorderLayout.WEST);
         add(inputField,  BorderLayout.CENTER);
-        add(sendButton,  BorderLayout.EAST);
+        add(right,       BorderLayout.EAST);
 
         inputField.addKeyListener(new KeyAdapter() {
             @Override public void keyPressed(KeyEvent e) {
@@ -81,6 +105,101 @@ public class MessageInputPanel extends JPanel {
     public void setSendListener(ActionListener l)  { sendButton.addActionListener(l); }
     public void setFileListener(ActionListener l)  { fileButton.addActionListener(l); }
     public void setAudioListener(ActionListener l) { audioButton.addActionListener(l); }
+
+    // ── Emoji picker ──────────────────────────────────────────────────────────
+
+    private JButton createEmojiButton() {
+        // Draw a smiley face with Graphics2D — no font/emoji dependency at all.
+        JButton btn = new JButton() {
+            @Override protected void paintComponent(Graphics g) {
+                Graphics2D g2 = setup(g);
+                try {
+                    // Dark rounded background
+                    g2.setColor(new Color(0x2A3942));
+                    g2.fill(new RoundRectangle2D.Float(2, 2, getWidth() - 4, getHeight() - 4, 10, 10));
+
+                    int cx = getWidth() / 2, cy = getHeight() / 2;
+                    int r = 10;
+                    Color ic = isEnabled() ? ChatTheme.TEXT_SECONDARY : new Color(0x445566);
+
+                    // Face circle
+                    g2.setColor(ic);
+                    g2.setStroke(new BasicStroke(1.5f));
+                    g2.draw(new Ellipse2D.Float(cx - r, cy - r, r * 2, r * 2));
+
+                    // Eyes
+                    g2.fill(new Ellipse2D.Float(cx - 4, cy - 4, 2.5f, 2.5f));
+                    g2.fill(new Ellipse2D.Float(cx + 2, cy - 4, 2.5f, 2.5f));
+
+                    // Smile arc
+                    g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2.draw(new Arc2D.Float(cx - 5, cy - 1, 10, 8, 0, -180, Arc2D.OPEN));
+                } finally {
+                    g2.dispose();
+                }
+            }
+        };
+        btn.setOpaque(false);
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setPreferredSize(new Dimension(42, 42));
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.addActionListener(e -> showEmojiPicker(btn));
+        return btn;
+    }
+
+    private void showEmojiPicker(JButton anchor) {
+        JPopupMenu popup = new JPopupMenu();
+        popup.setBackground(new Color(0x1C2526));
+        popup.setBorder(BorderFactory.createLineBorder(new Color(0x2A3942), 1));
+
+        // 6 columns × 5 rows grid
+        JPanel grid = new JPanel(new GridLayout(5, 6, 2, 2));
+        grid.setBackground(new Color(0x1C2526));
+        grid.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+        // Each cell: display the ASCII shortcode (renders on every OS),
+        // but insert the real Unicode emoji into the message field on click.
+        Font labelFont = new Font("Segoe UI", Font.BOLD, 11);
+        for (String[] pair : EMOJIS) {
+            String display = pair[0];   // ASCII shortcode shown in button
+            String insert  = pair[1];   // real emoji inserted into message
+
+            JButton eb = new JButton(display);
+            eb.setFont(labelFont);
+            eb.setForeground(ChatTheme.TEXT_PRIMARY);
+            eb.setBackground(new Color(0x2A3942));
+            eb.setOpaque(true);
+            eb.setContentAreaFilled(true);
+            eb.setBorderPainted(false);
+            eb.setFocusPainted(false);
+            eb.setPreferredSize(new Dimension(42, 32));
+            eb.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            eb.setToolTipText(insert);   // hover shows the actual emoji (tooltip uses system renderer)
+            eb.addActionListener(ev -> {
+                int pos = inputField.getCaretPosition();
+                String cur = inputField.getText();
+                final String placeholder = "Message";
+                if (cur.equals(placeholder)) {
+                    inputField.setText(insert);
+                    inputField.setForeground(ChatTheme.TEXT_PRIMARY);
+                    inputField.setCaretPosition(insert.length());
+                } else {
+                    inputField.setText(cur.substring(0, pos) + insert + cur.substring(pos));
+                    inputField.setCaretPosition(pos + insert.length());
+                }
+                popup.setVisible(false);
+                inputField.requestFocusInWindow();
+            });
+            grid.add(eb);
+        }
+
+        popup.add(grid);
+        popup.pack();
+        // Show above the emoji button
+        popup.show(anchor, 0, -popup.getPreferredSize().height - 4);
+    }
 
     @Override
     public void setEnabled(boolean enabled) {

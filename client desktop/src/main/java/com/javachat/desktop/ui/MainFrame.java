@@ -57,11 +57,15 @@ public class MainFrame extends JFrame implements MessageListener {
     private final Map<String, java.io.ByteArrayOutputStream> fileBuffers = new HashMap<>();
     private final Map<String, Message>                        fileMeta    = new HashMap<>();
 
+    // Sent file bytes — stored at send time so the sender can Save their own image
+    private final Map<String, byte[]>    sentFileData  = new HashMap<>();
+    private final Map<String, String>    sentFileNames = new HashMap<>();
+
     // Incoming audio reassembly
     private final Map<String, java.io.ByteArrayOutputStream> audioBuffers = new HashMap<>();
 
     public MainFrame(String username, ConnectionManager connectionManager) {
-        super("JavaChat");
+        super("AchrafChat");
         this.username          = username;
         this.connectionManager = connectionManager;
 
@@ -70,12 +74,8 @@ public class MainFrame extends JFrame implements MessageListener {
         this.geminiChatManager = new GeminiChatManager(connectionManager);
 
         fileTransferManager.setProgressListener(new FileProgressListener() {
-            @Override public void onProgress(String f, long sent, long total) {
-                // silent — file bubble already shown at send time
-            }
-            @Override public void onComplete(String f) {
-                // file bubble already shown; nothing extra needed
-            }
+            @Override public void onProgress(String f, long sent, long total) {}
+            @Override public void onComplete(String fileId) {}
             @Override public void onError(String f, String reason) {
                 SwingUtils.runOnEDT(() ->
                     chatPanel.appendNotification("[File error] " + f + ": " + reason));
@@ -83,8 +83,11 @@ public class MainFrame extends JFrame implements MessageListener {
         });
 
         chatPanel = new GlobalChatPanel();
-        chatPanel.init(username, connectionManager, fileTransferManager, audioManager);
-        chatPanel.addUser(username);
+        // Pass sentFileData/sentFileNames so the file listener can store bytes for the sender
+        chatPanel.init(username, connectionManager, fileTransferManager, audioManager,
+                sentFileData, sentFileNames);
+        // Do NOT add self — the server sends every other connected user via USER_LIST.
+        // Showing your own name in the online list is confusing (WhatsApp doesn't do it).
 
         // Root layout
         JPanel root = new JPanel(new BorderLayout());
@@ -94,7 +97,7 @@ public class MainFrame extends JFrame implements MessageListener {
         root.add(buildAiBar(),  BorderLayout.SOUTH);
         setContentPane(root);
 
-        setTitle("JavaChat — " + username);
+        setTitle("AchrafChat — " + username);
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setPreferredSize(new Dimension(960, 640));
         pack();
@@ -143,6 +146,14 @@ public class MainFrame extends JFrame implements MessageListener {
                 chatPanel.addUser(message.getSender());
                 chatPanel.appendNotification(message.getSender() + " joined the chat.");
             }
+            case USER_LIST -> {
+                // Bulk-populate the online users list with all already-connected users
+                if (message.getUsernames() != null) {
+                    for (String u : message.getUsernames()) {
+                        chatPanel.addUser(u);
+                    }
+                }
+            }
             case USER_LEFT -> {
                 String leftUser = message.getSender();
                 chatPanel.removeUser(leftUser);
@@ -182,18 +193,36 @@ public class MainFrame extends JFrame implements MessageListener {
                 }
             }
             case FILE_COMPLETE -> {
-                // All chunks received — upgrade the bubble to show a Download button.
-                // We can't retroactively mutate the existing bubble, so we add a new one.
                 String fid  = message.getFileId();
+                // Check if this is the sender's own file (stored in sentFileData at send time)
+                byte[] sentData = fid != null ? sentFileData.remove(fid) : null;
+                if (sentData != null) {
+                    // Sender-side: show the bubble for their own file/image
+                    final String fileName = sentFileNames.remove(fid);
+                    final byte[] data     = sentData;
+                    if (isImageFile(fileName)) {
+                        chatPanel.appendImageBubble(null, fileName, data,
+                            ignored -> saveReceivedFile(fileName, data, username));
+                    } else {
+                        chatPanel.appendFileBubble(null, fileName, data.length,
+                            ignored -> saveReceivedFile(fileName, data, username));
+                    }
+                    break;
+                }
+                // Receiver-side: assemble chunks and show bubble
                 var buf  = fid != null ? fileBuffers.remove(fid) : null;
                 var meta = fid != null ? fileMeta.remove(fid)    : null;
                 if (buf != null && meta != null) {
                     final byte[] data     = buf.toByteArray();
                     final String sender   = meta.getSender();
                     final String fileName = meta.getFileName();
-                    final long   fileSize = data.length;
-                    chatPanel.appendFileBubble(sender, fileName, fileSize,
-                        ignored -> saveReceivedFile(fileName, data, sender));
+                    if (isImageFile(fileName)) {
+                        chatPanel.appendImageBubble(sender, fileName, data,
+                            ignored -> saveReceivedFile(fileName, data, sender));
+                    } else {
+                        chatPanel.appendFileBubble(sender, fileName, data.length,
+                            ignored -> saveReceivedFile(fileName, data, sender));
+                    }
                 }
             }
 
@@ -424,6 +453,14 @@ public class MainFrame extends JFrame implements MessageListener {
     // =========================================================================
     // Helpers
     // =========================================================================
+
+    /** Returns true if the filename has an image extension. */
+    private static boolean isImageFile(String name) {
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        return lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+            || lower.endsWith(".png") || lower.endsWith(".gif")
+            || lower.endsWith(".webp");
+    }
 
     private void saveReceivedFile(String suggestedName, byte[] data, String sender) {
         JFileChooser chooser = new JFileChooser();

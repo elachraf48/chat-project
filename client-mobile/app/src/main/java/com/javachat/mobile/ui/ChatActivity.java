@@ -40,8 +40,20 @@ public class ChatActivity extends AppCompatActivity implements MessageListener {
 
         drawerLayout = findViewById(R.id.drawerLayout);
 
+        // ANR FIX: setNotificationContext creates NotificationHelper which calls
+        // createNotificationChannel() — a synchronous Binder IPC to system_server
+        // that can block the main thread for several seconds → ANR → OS kills the
+        // TCP socket → server logs "Connection reset".
+        // Move it to a background thread. The notification channel will be ready
+        // well before the user can send a message.
+        new Thread(() ->
+                ConnectionManager.getInstance().setNotificationContext(
+                        ChatActivity.this)).start();
+
+        // Register listener NOW — before the fragment is added — so any message that
+        // arrives during the Activity-creation window (after LoginActivity nulled the
+        // listener) is delivered here rather than dropped.
         ConnectionManager.getInstance().setListener(this);
-        ConnectionManager.getInstance().setNotificationContext(this);
 
         if (savedInstanceState == null) {
             // commitNow() runs the transaction synchronously so onViewCreated fires before we
@@ -51,6 +63,11 @@ public class ChatActivity extends AppCompatActivity implements MessageListener {
                     .commitNow();
             GlobalChatFragment f = getGlobalChatFragment();
             if (f != null) {
+                // Fix 2: wire the online-users RecyclerView from here (Activity layout)
+                // so the fragment never has to call requireActivity().findViewById().
+                androidx.recyclerview.widget.RecyclerView rvOnlineUsers =
+                        findViewById(R.id.rvOnlineUsers);
+                f.bindOnlineUsersRecyclerView(rvOnlineUsers);
                 f.addSelf(AuthenticationManager.getInstance().getUsername());
             }
         }
@@ -78,6 +95,17 @@ public class ChatActivity extends AppCompatActivity implements MessageListener {
         return super.onOptionsItemSelected(item);
     }
 
+    // Re-register listener on every resume so it survives pause/resume cycles
+    // (screen lock, notification shade, permission dialogs, rotation).
+    // onPause intentionally does NOT null the listener — doing so would drop
+    // every incoming message while any system dialog overlays the chat screen.
+    // LoginActivity.openChat() already calls setListener(null) before navigating away.
+    @Override
+    protected void onResume() {
+        super.onResume();
+        ConnectionManager.getInstance().setListener(this);
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
@@ -103,9 +131,16 @@ public class ChatActivity extends AppCompatActivity implements MessageListener {
 
     @Override
     public void onConnectionLost(String reason) {
+        android.util.Log.e("JavaChat.Chat", "onConnectionLost: " + reason);
+        // Guard: never show a dialog on a finished/destroyed Activity — it would
+        // throw a WindowManager exception and produce a black screen on some OEMs.
+        if (isFinishing() || isDestroyed()) return;
+        String detail = (reason != null && !reason.isEmpty())
+                ? getString(R.string.disconnected_msg) + "\n\nReason: " + reason
+                : getString(R.string.disconnected_msg);
         new AlertDialog.Builder(this)
                 .setTitle(getString(R.string.disconnected_title))
-                .setMessage(getString(R.string.disconnected_msg))
+                .setMessage(detail)
                 .setPositiveButton(R.string.btn_reconnect, (d, w) -> returnToLogin())
                 .setNegativeButton(R.string.btn_exit, (d, w) -> finish())
                 .setCancelable(false)

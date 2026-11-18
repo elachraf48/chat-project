@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inline image bubble.
+     layoutImageSelf  → own sent image (right-aligned)
+     layoutImageOther → received image (left-aligned, with sender name + Save button) -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
+
+    <!-- ── Sent image (self, right) ─────────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/layoutImageSelf"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bubble_self"
+            android:elevation="1dp">
+
+            <ImageView
+                android:id="@+id/ivImageSelf"
+                android:layout_width="240dp"
+                android:layout_height="wrap_content"
+                android:adjustViewBounds="true"
+                android:maxWidth="240dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/img_preview"/>
+
+            <!-- Save button — sender can also download their own sent image -->
+            <Button
+                android:id="@+id/btnSaveImageSelf"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:text="@string/btn_save_image"
+                android:textColor="@color/download_btn_text"
+                android:backgroundTint="@color/download_btn_bg"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp"/>
+
+            <TextView
+                android:id="@+id/tvImageTimeSelf"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:textColor="@color/timestamp_color"
+                android:textSize="11sp"
+                android:paddingTop="2dp"/>
+
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ── Sender name (received only) ──────────────────────────────────────── -->
+    <TextView
+        android:id="@+id/tvImageSenderName"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/sender_name_color"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:paddingStart="4dp"
+        android:paddingBottom="2dp"
+        android:visibility="gone"/>
+
+    <!-- ── Received image (other, left) ─────────────────────────────────────── -->
+    <LinearLayout
+        android:id="@+id/layoutImageOther"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bubble_other"
+        android:elevation="1dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/ivImageOther"
+            android:layout_width="240dp"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:maxWidth="240dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="@string/img_preview"/>
+
+        <Button
+            android:id="@+id/btnSaveImage"
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:text="@string/btn_save_image"
+            android:textColor="@color/download_btn_text"
+            android:backgroundTint="@color/download_btn_bg"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"/>
+
+        <TextView
+            android:id="@+id/tvImageTimeOther"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:textColor="@color/timestamp_color"
+            android:textSize="11sp"
+            android:paddingTop="2dp"/>
+
+    </LinearLayout>
+
+</LinearLayout>

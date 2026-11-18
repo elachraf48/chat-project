@@ -26,6 +26,10 @@ public class Message {
     private Integer chunkIndex;
     private String  data;
 
+    // Presence list — sent once on join
+    /** USER_LIST payload — list of all already-connected usernames sent to a newcomer. */
+    private java.util.List<String> usernames;
+
     // AI fields
     private String prompt;
 
@@ -161,6 +165,9 @@ public class Message {
 
     public String getData()                           { return data; }
     public void setData(String data)                  { this.data = data; }
+
+    public java.util.List<String> getUsernames()                        { return usernames; }
+    public void setUsernames(java.util.List<String> usernames)          { this.usernames = usernames; }
 
     public String getPrompt()                         { return prompt; }
     public void setPrompt(String prompt)              { this.prompt = prompt; }

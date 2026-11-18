@@ -10,6 +10,13 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+        <!-- Fix 3: prevents black window while fragment inflates -->
+        <item name="android:windowBackground">@color/background_chat</item>
+    </style>
+
+    <!-- Fix 1: splash theme for MainActivity — shows brand colour instead of black -->
+    <style name="Theme.JavaChat.Splash" parent="Theme.JavaChat.NoActionBar">
+        <item name="android:windowBackground">@color/colorPrimary</item>
     </style>
 
     <style name="MessageBubble.Self" parent="">

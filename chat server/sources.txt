@@ -1,0 +1,14 @@
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\Main.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\ai\GeminiService.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\auth\UserService.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\chat\GlobalChatRoom.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\config\ServerConfig.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\network\ChatServer.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\network\ClientHandler.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\network\ClientManager.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\protocol\Message.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\protocol\MessageType.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\protocol\ProtocolManager.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\transfer\AudioTransferManager.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\transfer\FileTransferManager.java
+C:\Users\Administrateur\Documents\GitHub\chat project\chat server\src\main\java\com\javachat\server\util\Logger.java

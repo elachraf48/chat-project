@@ -1,12 +1,12 @@
 <resources>
-    <string name="app_name">JavaChat</string>
+    <string name="app_name">AchrafChat</string>
     <string name="login_title">Sign In</string>
     <string name="hint_username">Username</string>
     <string name="hint_server_ip">Server IP</string>
     <string name="hint_server_port">Port</string>
     <string name="btn_connect">Connect</string>
     <string name="connecting">Connecting…</string>
-    <string name="chat_title">JavaChat</string>
+    <string name="chat_title">AchrafChat</string>
     <string name="hint_message">Message…</string>
     <string name="btn_send">Send</string>
     <string name="btn_attach">Attach file</string>
@@ -24,6 +24,9 @@
     <string name="play_audio">▶  Voice message</string>
     <string name="btn_download">⬇ Download</string>
     <string name="file_saved_to_downloads">✓ Saved to Downloads</string>
+    <string name="btn_save_image">⬇ Save</string>
+    <string name="img_preview">Image preview</string>
+    <string name="btn_emoji">Emoji</string>
 
     <!-- Errors -->
     <string name="error_connection">Connection failed. Check IP and port.</string>

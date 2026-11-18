@@ -40,7 +40,7 @@ import java.util.concurrent.Executors;
 public class FileTransferManager {
 
     public interface TransferCallback {
-        void onSendComplete(String fileName);
+        void onSendComplete(String fileId, String fileName);
         void onSendFailed(String fileName);
     }
 
@@ -80,8 +80,13 @@ public class FileTransferManager {
                 int chunkSize   = ClientConfig.CHUNK_SIZE_BYTES;
                 int totalChunks = (int) Math.ceil((double) data.length / chunkSize);
 
-                ConnectionManager.getInstance().send(
-                        Message.fileMeta(fileId, fileName, (long) data.length, totalChunks));
+                // Store bytes and meta for the sender so they can preview the image
+                // and tap Save — same as the receiver path uses receivedFiles/incomingMeta.
+                Message senderMeta = Message.fileMeta(fileId, fileName, (long) data.length, totalChunks);
+                incomingMeta.put(fileId, senderMeta);
+                receivedFiles.put(fileId, data);
+
+                ConnectionManager.getInstance().send(senderMeta);
 
                 for (int i = 0; i < totalChunks; i++) {
                     int start = i * chunkSize;
@@ -93,7 +98,7 @@ public class FileTransferManager {
                 }
 
                 ConnectionManager.getInstance().send(Message.fileComplete(fileId));
-                if (callback != null) callback.onSendComplete(fileName);
+                if (callback != null) callback.onSendComplete(fileId, fileName);
 
             } catch (IOException e) {
                 if (callback != null) callback.onSendFailed(fileName);
@@ -139,6 +144,14 @@ public class FileTransferManager {
             default:
                 break;
         }
+    }
+
+    /**
+     * Returns the fully assembled bytes for a completed incoming transfer,
+     * or null if the transfer is unknown or not yet complete.
+     */
+    public byte[] getReceivedFileBytes(String fileId) {
+        return fileId != null ? receivedFiles.get(fileId) : null;
     }
 
     /**

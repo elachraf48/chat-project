@@ -1,15 +1,22 @@
 package com.javachat.mobile.ui;
 
 import android.content.Context;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.GridLayout;
 import android.widget.ImageButton;
+import android.widget.PopupWindow;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -47,15 +54,20 @@ public class GlobalChatFragment extends Fragment {
 
     private RecyclerView rvMessages;
     private EditText etMessageInput;
-    private Button btnSend;
+    private ImageButton btnSend;
+    private Button btnEmoji;
     private ImageButton btnAttach;
     private ImageButton btnRecord;
     private ImageButton btnAi;
 
     private MessageAdapter messageAdapter;
-    private OnlineUsersAdapter onlineUsersAdapter;
+    // onlineUsersAdapter is initialised here (not in onViewCreated) so that
+    // addSelf() / addOnlineUser() can be called from ChatActivity.onCreate()
+    // before the fragment view has been laid out. The adapter holds the data list
+    // and is attached to the RecyclerView later in bindOnlineUsersRecyclerView().
     private final List<Message> messages = new ArrayList<>();
     private final List<String> onlineUsers = new ArrayList<>();
+    private final OnlineUsersAdapter onlineUsersAdapter = new OnlineUsersAdapter(onlineUsers);
 
     private ActivityResultLauncher<String[]> filePickerLauncher;
 
@@ -84,7 +96,8 @@ public class GlobalChatFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         rvMessages     = view.findViewById(R.id.rvMessages);
         etMessageInput = view.findViewById(R.id.etMessageInput);
-        btnSend        = view.findViewById(R.id.btnSend);
+        btnSend        = (ImageButton) view.findViewById(R.id.btnSend);
+        btnEmoji       = view.findViewById(R.id.btnEmoji);
         btnAttach      = view.findViewById(R.id.btnAttach);
         btnRecord      = view.findViewById(R.id.btnRecord);
         btnAi          = view.findViewById(R.id.btnAi);
@@ -96,17 +109,27 @@ public class GlobalChatFragment extends Fragment {
         rvMessages.setLayoutManager(lm);
         rvMessages.setAdapter(messageAdapter);
 
-        onlineUsersAdapter = new OnlineUsersAdapter(onlineUsers);
-        RecyclerView rvOnlineUsers = requireActivity().findViewById(R.id.rvOnlineUsers);
-        if (rvOnlineUsers != null) {
-            rvOnlineUsers.setLayoutManager(new LinearLayoutManager(requireContext()));
-            rvOnlineUsers.setAdapter(onlineUsersAdapter);
-        }
+        // onlineUsersAdapter already initialised as a field — just wire the RecyclerView.
+        // Fix 2: rvOnlineUsers lives in the Activity layout, not the fragment layout.
+        // Wire it via bindOnlineUsersRecyclerView() called by ChatActivity after commitNow().
 
         btnSend.setOnClickListener(v -> sendTextMessage());
         btnAttach.setOnClickListener(v -> openFilePicker());
         btnRecord.setOnClickListener(v -> showAudioDialog());
         btnAi.setOnClickListener(v -> showAiDialog());
+        btnEmoji.setOnClickListener(v -> showEmojiPicker(v));
+    }
+
+    /**
+     * Fix 2: called by {@link ChatActivity} after {@code commitNow()} so that the
+     * online-users RecyclerView (which lives in the Activity's DrawerLayout, not in
+     * this fragment) is wired up only once the Activity view hierarchy is fully ready.
+     */
+    public void bindOnlineUsersRecyclerView(RecyclerView rvOnlineUsers) {
+        if (rvOnlineUsers != null) {
+            rvOnlineUsers.setLayoutManager(new LinearLayoutManager(requireContext()));
+            rvOnlineUsers.setAdapter(onlineUsersAdapter);
+        }
     }
 
     @Override
@@ -139,6 +162,17 @@ public class GlobalChatFragment extends Fragment {
             case USER_LEFT:
                 addSystemMessage(message.getSender() + " left");
                 removeOnlineUser(message.getSender());
+                break;
+
+            case USER_LIST:
+                // Bulk-populate the online users list with all users who were already
+                // connected when this client joined. Sent as a single message so it
+                // arrives after JOIN_SUCCESS even if ChatActivity.onResume fires late.
+                if (message.getUsernames() != null) {
+                    for (String u : message.getUsernames()) {
+                        addOnlineUser(u);
+                    }
+                }
                 break;
 
             case FILE_META:
@@ -201,11 +235,13 @@ public class GlobalChatFragment extends Fragment {
         FileTransferManager.getInstance().sendFile(uri, requireContext(),
                 new FileTransferManager.TransferCallback() {
                     @Override
-                    public void onSendComplete(String fileName) {
+                    public void onSendComplete(String fileId, String fileName) {
                         if (!isAdded()) return;
                         requireActivity().runOnUiThread(() -> {
                             if (!isAdded()) return;
-                            addFileMessage(myUsername, null, fileName,
+                            // Pass the real fileId so the bubble can load the image bytes
+                            // and the Save button can write them to Downloads.
+                            addFileMessage(myUsername, fileId, fileName,
                                     java.time.Instant.now().toString());
                         });
                     }
@@ -283,6 +319,68 @@ public class GlobalChatFragment extends Fragment {
     }
 
     // -------------------------------------------------------------------------
+    // Emoji picker
+    // -------------------------------------------------------------------------
+
+    private static final String[] EMOJIS = {
+        "😀","😂","😍","😎","🥰","😭","😡","🤔","👍","👎",
+        "❤️","🔥","🎉","💯","🙏","😊","🤣","😴","🤯","😱",
+        "👀","💪","🤝","🎮","🍕","☕","🌍","🚀","💡","✅"
+    };
+
+    private void showEmojiPicker(View anchor) {
+        Context ctx = requireContext();
+
+        // Build a 6-col GridLayout of emoji buttons
+        GridLayout grid = new GridLayout(ctx);
+        grid.setColumnCount(6);
+        grid.setRowCount(5);
+
+        int cellPx = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 40, ctx.getResources().getDisplayMetrics());
+
+        for (String emoji : EMOJIS) {
+            Button btn = new Button(ctx);
+            btn.setText(emoji);
+            btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+            btn.setBackground(null);
+            btn.setPadding(0, 0, 0, 0);
+
+            GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
+            lp.width  = cellPx;
+            lp.height = cellPx;
+            btn.setLayoutParams(lp);
+
+            btn.setOnClickListener(v -> {
+                int start = Math.max(etMessageInput.getSelectionStart(), 0);
+                int end   = Math.max(etMessageInput.getSelectionEnd(), 0);
+                etMessageInput.getText().replace(Math.min(start, end), Math.max(start, end), emoji);
+            });
+            grid.addView(btn);
+        }
+
+        ScrollView scroll = new ScrollView(ctx);
+        scroll.addView(grid);
+
+        int popupWidthPx = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 280, ctx.getResources().getDisplayMetrics());
+        int popupMaxHeightPx = (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, 200, ctx.getResources().getDisplayMetrics());
+
+        // White background with thin border — no XML drawable needed
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setStroke(2, Color.parseColor("#D0D0D0"));
+        bg.setCornerRadius(8f);
+        scroll.setBackground(bg);
+        scroll.setPadding(8, 8, 8, 8);
+
+        PopupWindow popup = new PopupWindow(scroll, popupWidthPx, popupMaxHeightPx, true);
+        popup.setElevation(8f);
+        popup.showAsDropDown(anchor, 0, 0, Gravity.END);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -346,9 +444,14 @@ public class GlobalChatFragment extends Fragment {
         if (idx >= 0) messageAdapter.notifyItemChanged(idx);
     }
 
-    /** Called by ChatActivity after the fragment is attached so the user sees themselves in the list. */
+    /**
+     * Previously added the local user to the online list so they saw themselves.
+     * Removed — showing your own name in the "online" drawer is confusing (WhatsApp
+     * doesn't show you in your own contacts list either). The server sends every
+     * *other* user via USER_LIST / USER_JOINED, which is the correct set to display.
+     */
     public void addSelf(String username) {
-        addOnlineUser(username);
+        // intentionally empty — do not add self to the online users drawer
     }
 
     private void addOnlineUser(String username) {
